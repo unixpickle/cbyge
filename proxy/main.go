@@ -58,6 +58,7 @@ func HandleConn(conn net.Conn, id int, outDir string) {
 
 	serverConn, err := cbyge.NewPacketConn()
 	essentials.Must(err)
+	defer serverConn.Close()
 
 	var packetLock sync.Mutex
 
@@ -81,8 +82,8 @@ func HandleConn(conn net.Conn, id int, outDir string) {
 			}
 		}
 	}
-	forward("in", clientConn, serverConn)
-	forward("out", serverConn, clientConn)
+	go forward("in", clientConn, serverConn)
+	go forward("out", serverConn, clientConn)
 
 	wg.Wait()
 }
