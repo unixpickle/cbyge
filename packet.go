@@ -10,44 +10,56 @@ const (
 	PacketTypePipe       = 7
 )
 
+const (
+	PacketPipeTypeSetStatus uint8 = 0xd0
+	PacketPipeTypeSetLum          = 0xd2
+	PacketPipeTypeSetCT           = 0xe2
+	PacketPipeTypeGetStatus       = 0xdb
+)
+
 type Packet struct {
 	Type       uint8
 	IsResponse bool
 	Data       []byte
 }
 
-// NewPacketSetDeviceStatus creates a packet for turning on or off a device.
-//
-// Set status to 1 to turn on, or 0 to turn off.
-func NewPacketSetDeviceStatus(device, status int) *Packet {
+// NewPacketPipe creates a "pipe buffer" packet with a given subtype.
+func NewPacketPipe(subtype uint8, data []byte) *Packet {
+	if len(data) > 0xff {
+		panic("payload is too long")
+	}
+	fmt.Println(len(data))
 	return &Packet{
 		Type: PacketTypePipe,
-		Data: []byte{
+		Data: append(append([]byte{
 			0x2a, 0x71, 0x67, 0x63, // Always present at the start of these packets
 			0x7a, 0x61, // Sequence number?
 			0x00,
 			0x7e, 0x0d, // Sequence number?
 
-			// 0x01, 0x00, // Unsure what this is, can be set to zero.
-			0, 0,
-
+			0x01, 0x00, // Unsure what this is, can be set to zero.
 			0x00, 0xf8, // Unsure what this is, but it is required.
-			0xd0, 0x0d, // Unsure what this is, but it is required.
-			0x00, 0x00, 0x00, 0x00, 0x00,
-			byte(device >> 8), byte(device & 0xff), // Device index
-			0x00, 0xd0, // Command?
 
-			// 0x11, 0x02, // Unknown, can be set to zero
-			0, 0,
-
-			byte(status),
-
-			0x00, 0x00,
-
-			// 0xc4, 0x7e // Seems to decrement per packet--unused checksum?
-			0, 0,
-		},
+			subtype, uint8(len(data)),
+		}, data...), 0, 0, 0),
 	}
+}
+
+// NewPacketSetDeviceStatus creates a packet for turning on or off a device.
+//
+// Set status to 1 to turn on, or 0 to turn off.
+func NewPacketSetDeviceStatus(device, status int) *Packet {
+	return NewPacketPipe(PacketPipeTypeSetStatus, []byte{
+		0, 0, 0, 0, 0,
+		byte(device >> 8), byte(device & 0xff), // Device index
+		0, PacketPipeTypeSetStatus, // Command, repeated
+
+		// 0x11, 0x02, // Unknown, can be set to zero
+		0, 0,
+
+		byte(status),
+		0,
+	})
 }
 
 func (p *Packet) String() string {
