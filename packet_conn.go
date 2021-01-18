@@ -8,6 +8,11 @@ import (
 
 const DefaultPacketConnHost = "cm-ge.xlink.cn:23778"
 
+const (
+	PacketTypeAuth uint8 = 1
+	PacketTypePipe       = 7
+)
+
 type Packet struct {
 	Type       uint8
 	IsResponse bool
