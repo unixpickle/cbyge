@@ -1,9 +1,11 @@
 package cbyge
 
 import (
-	"errors"
+	"bytes"
 	"io"
 	"net"
+
+	"github.com/pkg/errors"
 )
 
 const DefaultPacketConnHost = "cm-ge.xlink.cn:23778"
@@ -94,4 +96,32 @@ func (p *PacketConn) Write(packet *Packet) error {
 
 func (p *PacketConn) Close() error {
 	return p.conn.Close()
+}
+
+// Auth does an authentication exchange with the server.
+//
+// Provide an authorization code, as obtained by Login().
+func (p *PacketConn) Auth(code string) error {
+	data := bytes.NewBuffer(nil)
+	data.Write([]byte{0x03, 0x24, 0x8c, 0x57, 0x7d, 0, 0x10})
+	data.Write([]byte(code))
+	data.Write([]byte{0, 0, 0xb4})
+	packet := &Packet{
+		Type: PacketTypeAuth,
+		Data: data.Bytes(),
+	}
+	if err := p.Write(packet); err != nil {
+		return errors.Wrap(err, "authenticate")
+	}
+	response, err := p.Read()
+	if err != nil {
+		return errors.Wrap(err, "authenticate")
+	}
+	if response.Type != PacketTypeAuth || !packet.IsResponse {
+		return errors.New("authenticate: unexpected response packet type")
+	}
+	if !bytes.Equal(response.Data, []byte{0, 0}) {
+		return errors.New("authenticate: credentials not recognized")
+	}
+	return nil
 }
