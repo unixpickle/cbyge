@@ -40,6 +40,9 @@ func main() {
 func MakeOutputDir(root string) (string, int) {
 	for i := 0; true; i++ {
 		newDir := filepath.Join(root, strconv.Itoa(i))
+		if _, err := os.Stat(newDir); err == nil {
+			continue
+		}
 		if err := os.MkdirAll(newDir, 0755); err == nil {
 			return newDir, i
 		} else if !os.IsExist(err) {
