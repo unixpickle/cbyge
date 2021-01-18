@@ -2,8 +2,10 @@ package cbyge
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -19,6 +21,19 @@ type Packet struct {
 	Type       uint8
 	IsResponse bool
 	Data       []byte
+}
+
+func (p *Packet) String() string {
+	var hexStr strings.Builder
+	for i, x := range p.Data {
+		if i > 0 {
+			hexStr.WriteByte(' ')
+		}
+		hexChar := fmt.Sprintf("%02x", x)
+		hexStr.WriteString(hexChar)
+	}
+	return fmt.Sprintf("Packet(type=%d, response=%v, data=[%s])",
+		p.Type, p.IsResponse, hexStr.String())
 }
 
 func (p *Packet) encode() []byte {
@@ -117,7 +132,7 @@ func (p *PacketConn) Auth(code string) error {
 	if err != nil {
 		return errors.Wrap(err, "authenticate")
 	}
-	if response.Type != PacketTypeAuth || !packet.IsResponse {
+	if response.Type != PacketTypeAuth || !response.IsResponse {
 		return errors.New("authenticate: unexpected response packet type")
 	}
 	if !bytes.Equal(response.Data, []byte{0, 0}) {
