@@ -63,7 +63,8 @@ func (p *Packet) String() string {
 		p.Type, p.IsResponse, hexStr.String())
 }
 
-func (p *Packet) encode() []byte {
+// Encode the packet in raw binary form.
+func (p *Packet) Encode() []byte {
 	typeByte := byte(p.Type<<4) | 3
 	if p.IsResponse {
 		typeByte |= 8

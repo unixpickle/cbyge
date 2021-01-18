@@ -56,7 +56,7 @@ func (p *PacketConn) Read() (*Packet, error) {
 }
 
 func (p *PacketConn) Write(packet *Packet) error {
-	data := packet.encode()
+	data := packet.Encode()
 	for len(data) > 0 {
 		n, err := p.conn.Write(data)
 		if err != nil {
