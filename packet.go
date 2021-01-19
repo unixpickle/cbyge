@@ -28,7 +28,6 @@ func NewPacketPipe(subtype uint8, data []byte) *Packet {
 	if len(data) > 0xff {
 		panic("payload is too long")
 	}
-	fmt.Println(len(data))
 	return &Packet{
 		Type: PacketTypePipe,
 		Data: append(append([]byte{
