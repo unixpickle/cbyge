@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -135,4 +137,46 @@ func (p *Packet) Encode() []byte {
 		byte(length & 0xff),
 	}
 	return append(header, p.Data...)
+}
+
+type StatusPaginatedResponse struct {
+	Device    int
+	ColorTone uint8
+	IsOn      bool
+}
+
+func IsStatusPaginatedResponse(p *Packet) bool {
+	if p.Type != PacketTypePipe {
+		return false
+	}
+	if len(p.Data) < 15 {
+		return false
+	}
+	return p.Data[13] == PacketPipeTypeGetStatusPaginated
+}
+
+func DecodeStatusPaginatedResponse(p *Packet) ([]StatusPaginatedResponse, error) {
+	if !IsStatusPaginatedResponse(p) {
+		return nil, errors.New("packet is not a status paginated response")
+	}
+	length := int(p.Data[14])
+	nextData := p.Data[15:]
+	if length > len(nextData) || length < 6 {
+		return nil, errors.New("status paginated response buffer underflow")
+	}
+	responseData := nextData[6:length]
+	if len(responseData)%24 != 0 {
+		return nil, errors.New("status paginated response has incorrect length")
+	}
+
+	var responses []StatusPaginatedResponse
+	for len(responseData) > 0 {
+		responses = append(responses, StatusPaginatedResponse{
+			Device:    int(responseData[1]),
+			ColorTone: uint8(responseData[17]),
+			IsOn:      responseData[9] != 0,
+		})
+		responseData = responseData[24:]
+	}
+	return responses, nil
 }
