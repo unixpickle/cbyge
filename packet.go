@@ -61,6 +61,41 @@ func NewPacketSetDeviceStatus(device, status int) *Packet {
 	})
 }
 
+// NewPacketSetLum creates a packet for setting a device's brightness.
+//
+// Set brightness to a number in [1, 100].
+func NewPacketSetLum(device, brightness int) *Packet {
+	if brightness < 1 || brightness > 100 {
+		panic("invalid brightness value")
+	}
+	return NewPacketPipe(PacketPipeTypeSetLum, []byte{
+		0, 0, 0, 0, 0,
+		byte(device >> 8), byte(device & 0xff), // Device index
+		0, PacketPipeTypeSetLum, // Command, repeated
+
+		// 0x11, 0x02, // Unknown, can be set to zero
+		0, 0,
+
+		byte(brightness),
+	})
+}
+
+// NewPacketSetCT creates a packet for setting a device's color tone.
+//
+// Set tone is a number in [0, 100], where 100 is blue and 0 is orange.
+func NewPacketSetCT(device, ct int) *Packet {
+	if ct < 0 || ct > 100 {
+		panic("invalid color tone value")
+	}
+	return NewPacketPipe(PacketPipeTypeSetCT, []byte{
+		0, 0, 0, 0, 0,
+		byte(device >> 8), byte(device & 0xff), // Device index
+		0, PacketPipeTypeSetCT, // Command, repeated
+		0, 0,
+		0x05, byte(ct),
+	})
+}
+
 func (p *Packet) String() string {
 	var hexStr strings.Builder
 	for i, x := range p.Data {
