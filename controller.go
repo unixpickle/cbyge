@@ -102,6 +102,42 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (StatusPaginatedResponse,
 	return responsePacket[0], nil
 }
 
+// SetDeviceStatus turns on or off a device.
+func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
+	statusInt := 0
+	if status {
+		statusInt = 1
+	}
+	packet := NewPacketSetDeviceStatus(d.switchID, 123, d.deviceIndex, statusInt)
+	return c.callAndWaitSimple(packet, "set device status")
+}
+
+// SetDeviceLum changes a device's brightness.
+//
+// Brightness values are in [1, 100].
+func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
+	packet := NewPacketSetLum(d.switchID, 123, d.deviceIndex, lum)
+	return c.callAndWaitSimple(packet, "set device luminance")
+}
+
+// SetDeviceCT changes a device's color tone.
+//
+// Color tone values are in [0, 100].
+func (c *Controller) SetDeviceCT(d *ControllerDevice, ct int) error {
+	packet := NewPacketSetCT(d.switchID, 123, d.deviceIndex, ct)
+	return c.callAndWaitSimple(packet, "set device color tone")
+}
+
+func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
+	err := c.callAndWait([]*Packet{p}, func(p *Packet) bool {
+		return p.Type == PacketTypePipe && p.IsResponse
+	})
+	if err != nil {
+		return errors.Wrap(err, context)
+	}
+	return nil
+}
+
 // callAndWait sends packets on a new PacketConn and waits until f returns
 // true on a response, or waits for a timeout.
 func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
