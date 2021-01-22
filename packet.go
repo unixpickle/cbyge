@@ -140,9 +140,10 @@ func (p *Packet) Encode() []byte {
 }
 
 type StatusPaginatedResponse struct {
-	Device    int
-	ColorTone uint8
-	IsOn      bool
+	Device     int
+	Brightness uint8
+	ColorTone  uint8
+	IsOn       bool
 }
 
 func IsStatusPaginatedResponse(p *Packet) bool {
@@ -172,9 +173,10 @@ func DecodeStatusPaginatedResponse(p *Packet) ([]StatusPaginatedResponse, error)
 	var responses []StatusPaginatedResponse
 	for len(responseData) > 0 {
 		responses = append(responses, StatusPaginatedResponse{
-			Device:    int(responseData[1]),
-			ColorTone: uint8(responseData[17]),
-			IsOn:      responseData[9] != 0,
+			Device:     int(responseData[1]),
+			Brightness: uint8(responseData[13]),
+			ColorTone:  uint8(responseData[17]),
+			IsOn:       responseData[9] != 0,
 		})
 		responseData = responseData[24:]
 	}
