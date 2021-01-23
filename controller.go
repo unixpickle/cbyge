@@ -1,6 +1,7 @@
 package cbyge
 
 import (
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -9,13 +10,33 @@ import (
 const DefaultTimeout = time.Second * 10
 
 type ControllerDevice struct {
+	deviceID    string
 	switchID    uint32
 	deviceIndex int
 	name        string
+
+	lastStatus     StatusPaginatedResponse
+	lastStatusLock sync.RWMutex
 }
 
+// DeviceID gets a unique identifier for the device.
+func (c *ControllerDevice) DeviceID() string {
+	return c.deviceID
+}
+
+// Name gets the user-assigned name of the device.
 func (c *ControllerDevice) Name() string {
 	return c.name
+}
+
+// LastStatus gets the last known status of the device.
+//
+// This is not updated automatically, but it will be updated on a device
+// object when Controller.DeviceStatus() is called.
+func (c *ControllerDevice) LastStatus() StatusPaginatedResponse {
+	c.lastStatusLock.RLock()
+	defer c.lastStatusLock.RUnlock()
+	return c.lastStatus
 }
 
 // A Controller is a high-level API for manipulating C by GE devices.
@@ -49,6 +70,8 @@ func NewControllerLogin(email, password string) (*Controller, error) {
 }
 
 // Devices enumerates the devices available to the account.
+//
+// Each device's status is available through its LastStatus() method.
 func (c *Controller) Devices() ([]*ControllerDevice, error) {
 	devicesResponse, err := GetDevices(c.sessionInfo.UserID, c.sessionInfo.AccessToken)
 	if err != nil {
@@ -65,6 +88,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 		}
 		for _, bulb := range props.Bulbs {
 			cd := &ControllerDevice{
+				deviceID: bulb.DeviceID,
 				switchID: bulb.SwitchID,
 				name:     bulb.DisplayName,
 			}
@@ -80,6 +104,9 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 }
 
 // DeviceStatus gets the status for a previously enumerated device.
+//
+// If no error occurs, the status is updated in d.LastStatus() in addition to
+// being returned.
 func (c *Controller) DeviceStatus(d *ControllerDevice) (StatusPaginatedResponse, error) {
 	var responsePacket []StatusPaginatedResponse
 	var decodeErr error
@@ -99,6 +126,9 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (StatusPaginatedResponse,
 	if err != nil {
 		return StatusPaginatedResponse{}, errors.Wrap(err, "lookup device status")
 	}
+	d.lastStatusLock.Lock()
+	d.lastStatus = responsePacket[0]
+	d.lastStatusLock.Unlock()
 	return responsePacket[0], nil
 }
 
