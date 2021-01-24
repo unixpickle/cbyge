@@ -9,6 +9,8 @@ import (
 
 const DefaultTimeout = time.Second * 10
 
+var RemoteCallError = errors.New("the server returned with an error")
+
 type ControllerDevice struct {
 	deviceID    string
 	switchID    uint32
@@ -195,6 +197,14 @@ func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
 			if err != nil {
 				errChan <- err
 				return
+			}
+			if packet.IsResponse {
+				if len(packet.Data) > 0 {
+					if packet.Data[len(packet.Data)-1] != 0 {
+						errChan <- RemoteCallError
+						return
+					}
+				}
 			}
 			select {
 			case packets <- packet:
