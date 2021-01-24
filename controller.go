@@ -11,13 +11,20 @@ const DefaultTimeout = time.Second * 10
 
 var RemoteCallError = errors.New("the server returned with an error")
 
-type ControllerDevice struct {
-	deviceID    string
-	switchID    uint32
-	deviceIndex int
-	name        string
+type ControllerDeviceStatus struct {
+	StatusPaginatedResponse
 
-	lastStatus     StatusPaginatedResponse
+	// If IsOnline is false, all other fields are invalid.
+	// This means that the device could not be reached.
+	IsOnline bool
+}
+
+type ControllerDevice struct {
+	deviceID string
+	switchID uint32
+	name     string
+
+	lastStatus     ControllerDeviceStatus
 	lastStatusLock sync.RWMutex
 }
 
@@ -35,7 +42,7 @@ func (c *ControllerDevice) Name() string {
 //
 // This is not updated automatically, but it will be updated on a device
 // object when Controller.DeviceStatus() is called.
-func (c *ControllerDevice) LastStatus() StatusPaginatedResponse {
+func (c *ControllerDevice) LastStatus() ControllerDeviceStatus {
 	c.lastStatusLock.RLock()
 	defer c.lastStatusLock.RUnlock()
 	return c.lastStatus
@@ -45,6 +52,13 @@ func (c *ControllerDevice) LastStatus() StatusPaginatedResponse {
 type Controller struct {
 	sessionInfo *SessionInfo
 	timeout     time.Duration
+
+	deviceIndicesLock sync.RWMutex
+	deviceIndices     map[string]int
+
+	// Prevent multiple PacketConns at once, since the server boots
+	// off one connection when anoher is made.
+	packetConnLock sync.Mutex
 }
 
 // NewController creates a Controller using a pre-created session and a
@@ -58,6 +72,8 @@ func NewController(s *SessionInfo, timeout time.Duration) *Controller {
 	return &Controller{
 		sessionInfo: s,
 		timeout:     timeout,
+
+		deviceIndices: map[string]int{},
 	}
 }
 
@@ -94,11 +110,9 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 				switchID: bulb.SwitchID,
 				name:     bulb.DisplayName,
 			}
-			status, err := c.DeviceStatus(cd)
-			if err != nil {
-				return nil, err
-			}
-			cd.deviceIndex = status.Device
+			// Update device status. If this fails, we swallow the error
+			// because the device is automatically marked offline.
+			c.DeviceStatus(cd)
 			results = append(results, cd)
 		}
 	}
@@ -109,7 +123,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 //
 // If no error occurs, the status is updated in d.LastStatus() in addition to
 // being returned.
-func (c *Controller) DeviceStatus(d *ControllerDevice) (StatusPaginatedResponse, error) {
+func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, error) {
 	var responsePacket []StatusPaginatedResponse
 	var decodeErr error
 	packet := NewPacketGetStatusPaginated(d.switchID, 0)
@@ -126,21 +140,34 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (StatusPaginatedResponse,
 		err = errors.New("lookup device status: no devices in response")
 	}
 	if err != nil {
-		return StatusPaginatedResponse{}, errors.Wrap(err, "lookup device status")
+		return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
+	}
+
+	c.deviceIndicesLock.Lock()
+	c.deviceIndices[d.deviceID] = responsePacket[0].Device
+	c.deviceIndicesLock.Unlock()
+
+	status := ControllerDeviceStatus{
+		StatusPaginatedResponse: responsePacket[0],
+		IsOnline:                true,
 	}
 	d.lastStatusLock.Lock()
-	d.lastStatus = responsePacket[0]
+	d.lastStatus = status
 	d.lastStatusLock.Unlock()
-	return responsePacket[0], nil
+	return status, nil
 }
 
 // SetDeviceStatus turns on or off a device.
 func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
+	index, err := c.getDeviceIndex(d)
+	if err != nil {
+		return errors.Wrap(err, "set device status")
+	}
 	statusInt := 0
 	if status {
 		statusInt = 1
 	}
-	packet := NewPacketSetDeviceStatus(d.switchID, 123, d.deviceIndex, statusInt)
+	packet := NewPacketSetDeviceStatus(d.switchID, 123, index, statusInt)
 	return c.callAndWaitSimple(packet, "set device status")
 }
 
@@ -148,7 +175,11 @@ func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
 //
 // Brightness values are in [1, 100].
 func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
-	packet := NewPacketSetLum(d.switchID, 123, d.deviceIndex, lum)
+	index, err := c.getDeviceIndex(d)
+	if err != nil {
+		return errors.Wrap(err, "set device luminance")
+	}
+	packet := NewPacketSetLum(d.switchID, 123, index, lum)
 	return c.callAndWaitSimple(packet, "set device luminance")
 }
 
@@ -156,8 +187,33 @@ func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
 //
 // Color tone values are in [0, 100].
 func (c *Controller) SetDeviceCT(d *ControllerDevice, ct int) error {
-	packet := NewPacketSetCT(d.switchID, 123, d.deviceIndex, ct)
+	index, err := c.getDeviceIndex(d)
+	if err != nil {
+		return errors.Wrap(err, "set device color tone")
+	}
+	packet := NewPacketSetCT(d.switchID, 123, index, ct)
 	return c.callAndWaitSimple(packet, "set device color tone")
+}
+
+func (c *Controller) getDeviceIndex(d *ControllerDevice) (int, error) {
+	c.deviceIndicesLock.Lock()
+	index, ok := c.deviceIndices[d.deviceID]
+	c.deviceIndicesLock.Unlock()
+	if ok {
+		// The device was already online.
+		return index, nil
+	}
+
+	// Getting the device status forces us to lookup the device index.
+	// If it succeeds, then the device has come online.
+	_, err := c.DeviceStatus(d)
+	if err != nil {
+		return 0, err
+	}
+
+	c.deviceIndicesLock.Lock()
+	defer c.deviceIndicesLock.Unlock()
+	return c.deviceIndices[d.deviceID], nil
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
@@ -173,6 +229,9 @@ func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
 // callAndWait sends packets on a new PacketConn and waits until f returns
 // true on a response, or waits for a timeout.
 func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
+	c.packetConnLock.Lock()
+	defer c.packetConnLock.Unlock()
+
 	conn, err := NewPacketConn()
 	if err != nil {
 		return err
