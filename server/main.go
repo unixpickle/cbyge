@@ -58,7 +58,7 @@ type Server struct {
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pass := r.FormValue("auth")
-		if subtle.ConstantTimeCompare([]byte(pass), []byte(s.WebPassword)) == 1 {
+		if subtle.ConstantTimeCompare([]byte(pass), []byte(s.WebPassword)) != 1 {
 			s.serveError(w, http.StatusForbidden, "incorrect 'auth' parameter")
 		} else {
 			handler(w, r)
