@@ -103,7 +103,6 @@ func NewPacketSetCT(deviceID uint32, seq uint16, device, ct int) *Packet {
 
 // NewPacketSetRGB creates a packet for setting a device's RGB color.
 func NewPacketSetRGB(deviceID uint32, seq uint16, device int, r, g, b uint8) *Packet {
-	// TODO: figure out how the packet is actually encoded.
 	return NewPacketPipe(deviceID, seq, PacketPipeTypeSetCT, []byte{
 		0, 0, 0, 0, 0,
 		byte(device >> 8), byte(device & 0xff), // Device index
@@ -192,11 +191,10 @@ func DecodeStatusPaginatedResponse(p *Packet) ([]StatusPaginatedResponse, error)
 			Brightness: uint8(responseData[13]),
 			ColorTone:  uint8(responseData[17]),
 			IsOn:       responseData[9] != 0,
-			// TODO: figure out exactly what these values actually mean.
-			UseRGB: responseData[17] == 0xfe,
-			R:      responseData[21],
-			G:      responseData[22],
-			B:      responseData[23],
+			UseRGB:     responseData[17] == 0xfe,
+			R:          responseData[21],
+			G:          responseData[22],
+			B:          responseData[23],
 		})
 		responseData = responseData[24:]
 	}
