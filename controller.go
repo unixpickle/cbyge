@@ -183,6 +183,16 @@ func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
 	return c.callAndWaitSimple(packet, "set device luminance")
 }
 
+// SetDeviceLum changes a device's RGB.
+func (c *Controller) SetDeviceRGB(d *ControllerDevice, r, g, b uint8) error {
+	index, err := c.getDeviceIndex(d)
+	if err != nil {
+		return errors.Wrap(err, "set device RGB")
+	}
+	packet := NewPacketSetRGB(d.switchID, 123, index, r, g, b)
+	return c.callAndWaitSimple(packet, "set device RGB")
+}
+
 // SetDeviceCT changes a device's color tone.
 //
 // Color tone values are in [0, 100].
