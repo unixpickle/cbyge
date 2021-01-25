@@ -236,7 +236,11 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 		return s.controller, nil
 	}
 	var err error
-	s.controller, err = cbyge.NewControllerLogin(s.Email, s.Password)
+	if s.controller != nil {
+		err = s.controller.Login(s.Email, s.Password)
+	} else {
+		s.controller, err = cbyge.NewControllerLogin(s.Email, s.Password)
+	}
 	if err == nil {
 		s.controllerExpire = time.Now().Add(SessionExpiration)
 	}

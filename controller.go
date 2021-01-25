@@ -50,8 +50,9 @@ func (c *ControllerDevice) LastStatus() ControllerDeviceStatus {
 
 // A Controller is a high-level API for manipulating C by GE devices.
 type Controller struct {
-	sessionInfo *SessionInfo
-	timeout     time.Duration
+	sessionInfoLock sync.RWMutex
+	sessionInfo     *SessionInfo
+	timeout         time.Duration
 
 	deviceIndicesLock sync.RWMutex
 	deviceIndices     map[string]int
@@ -87,17 +88,31 @@ func NewControllerLogin(email, password string) (*Controller, error) {
 	return NewController(info, 0), nil
 }
 
+// Login creates a new authentication token on the session using the username
+// and password.
+func (c *Controller) Login(email, password string) error {
+	info, err := Login(email, password, "")
+	if err != nil {
+		return errors.Wrap(err, "login controller")
+	}
+	c.sessionInfoLock.Lock()
+	c.sessionInfo = info
+	c.sessionInfoLock.Unlock()
+	return nil
+}
+
 // Devices enumerates the devices available to the account.
 //
 // Each device's status is available through its LastStatus() method.
 func (c *Controller) Devices() ([]*ControllerDevice, error) {
-	devicesResponse, err := GetDevices(c.sessionInfo.UserID, c.sessionInfo.AccessToken)
+	sessInfo := c.getSessionInfo()
+	devicesResponse, err := GetDevices(sessInfo.UserID, sessInfo.AccessToken)
 	if err != nil {
 		return nil, err
 	}
 	var results []*ControllerDevice
 	for _, dev := range devicesResponse {
-		props, err := GetDeviceProperties(c.sessionInfo.AccessToken, dev.ProductID, dev.ID)
+		props, err := GetDeviceProperties(sessInfo.AccessToken, dev.ProductID, dev.ID)
 		if err != nil {
 			if _, ok := err.(*RemoteError); !ok {
 				return nil, err
@@ -248,7 +263,7 @@ func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
 	}
 	defer conn.Close()
 
-	if err := conn.Auth(c.sessionInfo.Authorize); err != nil {
+	if err := conn.Auth(c.getSessionInfo().Authorize); err != nil {
 		return err
 	}
 
@@ -302,4 +317,10 @@ func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
 			return errors.New("timeout waiting for response")
 		}
 	}
+}
+
+func (c *Controller) getSessionInfo() *SessionInfo {
+	c.sessionInfoLock.RLock()
+	defer c.sessionInfoLock.RUnlock()
+	return c.sessionInfo
 }
