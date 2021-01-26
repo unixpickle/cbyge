@@ -82,14 +82,9 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 	for _, d := range devs {
 		status := d.LastStatus()
 		data = append(data, map[string]interface{}{
-			"id":   d.DeviceID(),
-			"name": d.Name(),
-			"status": map[string]interface{}{
-				"is_online":  status.IsOnline,
-				"is_on":      status.IsOn,
-				"brightness": status.Brightness,
-				"color_tone": status.ColorTone,
-			},
+			"id":     d.DeviceID(),
+			"name":   d.Name(),
+			"status": encodeStatus(status),
 		})
 	}
 	s.serveObject(w, http.StatusOK, data)
@@ -111,12 +106,7 @@ func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.serveObject(w, http.StatusOK, map[string]interface{}{
-		"is_online":  status.IsOnline,
-		"is_on":      status.IsOn,
-		"brightness": status.Brightness,
-		"color_tone": status.ColorTone,
-	})
+	s.serveObject(w, http.StatusOK, encodeStatus(status))
 }
 
 func (s *Server) HandleDeviceSetOn(w http.ResponseWriter, r *http.Request) {
@@ -245,4 +235,15 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 		s.controllerExpire = time.Now().Add(SessionExpiration)
 	}
 	return s.controller, err
+}
+
+func encodeStatus(s cbyge.ControllerDeviceStatus) map[string]interface{} {
+	return map[string]interface{}{
+		"is_online":  s.IsOnline,
+		"is_on":      s.IsOn,
+		"brightness": s.Brightness,
+		"color_tone": s.ColorTone,
+		"use_rgb":    s.UseRGB,
+		"rgb":        s.RGB,
+	}
 }

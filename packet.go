@@ -156,8 +156,8 @@ type StatusPaginatedResponse struct {
 	ColorTone  uint8
 	IsOn       bool
 
-	UseRGB  bool
-	R, G, B uint8
+	UseRGB bool
+	RGB    [3]uint8
 }
 
 func IsStatusPaginatedResponse(p *Packet) bool {
@@ -192,9 +192,9 @@ func DecodeStatusPaginatedResponse(p *Packet) ([]StatusPaginatedResponse, error)
 			ColorTone:  uint8(responseData[17]),
 			IsOn:       responseData[9] != 0,
 			UseRGB:     responseData[17] == 0xfe,
-			R:          responseData[21],
-			G:          responseData[22],
-			B:          responseData[23],
+			RGB: [3]uint8{
+				responseData[21], responseData[22], responseData[23],
+			},
 		})
 		responseData = responseData[24:]
 	}
