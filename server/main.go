@@ -39,6 +39,7 @@ func main() {
 	http.Handle("/api/device/status", s.Auth(s.HandleDeviceStatus))
 	http.Handle("/api/device/set_on", s.Auth(s.HandleDeviceSetOn))
 	http.Handle("/api/device/set_color_tone", s.Auth(s.HandleDeviceSetColorTone))
+	http.Handle("/api/device/set_rgb", s.Auth(s.HandleDeviceSetRGB))
 	http.Handle("/api/device/set_brightness", s.Auth(s.HandleDeviceSetBrightness))
 	http.ListenAndServe(addr, nil)
 }
@@ -133,6 +134,24 @@ func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request
 	}
 	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
 		return c.SetDeviceCT(d, tone)
+	})
+}
+
+func (s *Server) HandleDeviceSetRGB(w http.ResponseWriter, r *http.Request) {
+	var values []uint8
+	for _, k := range []string{"r", "g", "b"} {
+		value, err := strconv.Atoi(r.FormValue(k))
+		if err != nil {
+			s.serveError(w, http.StatusBadRequest, "invalid '"+k+"': "+err.Error())
+			return
+		} else if value < 0 || value > 0xff {
+			s.serveError(w, http.StatusBadRequest, "invalid '"+k+"': out of range")
+			return
+		}
+		values = append(values, uint8(value))
+	}
+	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
+		return c.SetDeviceRGB(d, values[0], values[1], values[2])
 	})
 }
 

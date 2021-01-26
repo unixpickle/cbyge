@@ -86,4 +86,4 @@ At this point, it was time to dig deeper into the protocol. After a combination 
 
 Once I had enough of the protocol worked out, I created an API for it. This API can list devices, get their statuses, and update various properties of the devices (e.g. brightness and color tone). Surprisingly, I found my API to be much faster and more reliable than the app itself. It seems that trying to use Bluetooth or WiFi before falling back to a remote server causes the app to be much flakier and less reliable than it could be.
 
-As a final note, I don't own all of the devices supported by this app, so I wasn't motivated (or easily able) to reverse-engineer how these devices would work. For example, I have no full-RGB bulbs, although I'd love to get some. hashtag sponsorship deal?
+As a final note, I don't own all of the devices supported by this app, so I wasn't motivated (or easily able) to reverse-engineer how these devices would work. For example, the same company produces smart outlets, sensors, and light switches.
