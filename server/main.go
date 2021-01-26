@@ -7,6 +7,7 @@ import (
 	"flag"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,22 +92,28 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
-	dev, err := s.getDevice(r.FormValue("id"))
-	if err != nil {
-		s.serveError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	ctrl, err := s.getController()
 	if err != nil {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	status, err := ctrl.DeviceStatus(dev)
-	if err != nil {
-		s.serveError(w, http.StatusInternalServerError, err.Error())
-		return
+
+	statuses := []map[string]interface{}{}
+	for _, id := range strings.Split(r.FormValue("id"), ",") {
+		dev, err := s.getDevice(id)
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		status, err := ctrl.DeviceStatus(dev)
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		statuses = append(statuses, encodeStatus(status))
 	}
-	s.serveObject(w, http.StatusOK, encodeStatus(status))
+
+	s.serveObject(w, http.StatusOK, statuses)
 }
 
 func (s *Server) HandleDeviceSetOn(w http.ResponseWriter, r *http.Request) {
@@ -145,22 +152,26 @@ func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 	f func(c *cbyge.Controller, d *cbyge.ControllerDevice) error) {
-	dev, err := s.getDevice(r.FormValue("id"))
-	if err != nil {
-		s.serveError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	ctrl, err := s.getController()
 	if err != nil {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	err = f(ctrl, dev)
-	if err != nil {
-		s.serveError(w, http.StatusInternalServerError, err.Error())
-		return
+
+	for _, id := range strings.Split(r.FormValue("id"), ",") {
+		dev, err := s.getDevice(id)
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		err = f(ctrl, dev)
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
-	// Return the new device status.
+
+	// Return the new device statuses.
 	s.HandleDeviceStatus(w, r)
 }
 
