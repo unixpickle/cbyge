@@ -78,30 +78,10 @@ type DeviceProperties struct {
 	} `json:"bulbsArray"`
 }
 
-type devicePropertiesResponse struct {
-	DeviceProperties
-	Error *RemoteError `json:"error"`
-}
-
-type RemoteError struct {
-	Msg     string `json:"msg"`
-	Code    int    `json:"code"`
-	Context string
-}
-
-func (l *RemoteError) Error() string {
-	return l.Context + ": " + l.Msg
-}
-
-type loginResponse struct {
-	SessionInfo
-	Error *RemoteError `json:"error"`
-}
-
 // Login authenticates with the server to create a new session.
 //
-// If the login fails because of incorrect credentials, then the error is of
-// type *RemoteError.
+// The resulting error can be checked with IsCredentialsError() to see if it
+// resulted from a bad login.
 //
 // If corpID is "", then DefaultCorpID is used.
 func Login(email, password, corpID string) (*SessionInfo, error) {
@@ -119,23 +99,22 @@ func Login(email, password, corpID string) (*SessionInfo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "login")
 	}
-	response := loginResponse{}
+	if err := decodeRemoteError(data, "login"); err != nil {
+		return nil, err
+	}
+	var response SessionInfo
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, errors.Wrap(err, "login")
 	}
-	if response.Error != nil {
-		response.Error.Context = "login"
-		return nil, response.Error
-	}
-	return &response.SessionInfo, nil
+	return &response, nil
 }
 
 // GetUserInfo gets UserInfo using information from Login.
 func GetUserInfo(userID int64, accessToken string) (*UserInfo, error) {
 	urlStr := fmt.Sprintf(userInfoURL, userID)
 	var response UserInfo
-	if err := makeAPICall(urlStr, accessToken, &response); err != nil {
-		return nil, errors.Wrap(err, "get user info")
+	if err := makeAPICall(urlStr, accessToken, &response, "get user info"); err != nil {
+		return nil, err
 	}
 	return &response, nil
 }
@@ -144,33 +123,29 @@ func GetUserInfo(userID int64, accessToken string) (*UserInfo, error) {
 func GetDevices(userID int64, accessToken string) ([]*DeviceInfo, error) {
 	urlStr := fmt.Sprintf(devicesURL, userID)
 	var response []*DeviceInfo
-	if err := makeAPICall(urlStr, accessToken, &response); err != nil {
-		return nil, errors.Wrap(err, "get devices")
+	if err := makeAPICall(urlStr, accessToken, &response, "get devices"); err != nil {
+		return nil, err
 	}
 	return response, nil
 }
 
 // GetDeviceProperties gets extended device information.
 //
-// If the request fails because of an error returned by the server, then the
-// returned error is of type *RemoteError.
+// The resulting error can be checked with IsPropertyNotExistsError(), to
+// check if the device has no properties.
 func GetDeviceProperties(accessToken, productID string, deviceID uint32) (*DeviceProperties, error) {
 	urlStr := fmt.Sprintf(devicePropertyURL, productID, deviceID)
-	var response devicePropertiesResponse
-	if err := makeAPICall(urlStr, accessToken, &response); err != nil {
-		return nil, errors.Wrap(err, "get device properties")
+	var response DeviceProperties
+	if err := makeAPICall(urlStr, accessToken, &response, "get device properties"); err != nil {
+		return nil, err
 	}
-	if response.Error != nil {
-		response.Error.Context = "get device properties"
-		return nil, response.Error
-	}
-	return &response.DeviceProperties, nil
+	return &response, nil
 }
 
-func makeAPICall(urlStr, accessToken string, response interface{}) error {
+func makeAPICall(urlStr, accessToken string, response interface{}, ctx string) error {
 	req, err := http.NewRequest("GET", urlStr, nil)
 	if err != nil {
-		return err
+		return errors.Wrap(err, ctx)
 	}
 	req.Header.Add("Access-Token", accessToken)
 	resp, err := http.DefaultClient.Do(req)
@@ -180,10 +155,15 @@ func makeAPICall(urlStr, accessToken string, response interface{}) error {
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		return errors.Wrap(err, ctx)
+	}
+	if err := decodeRemoteError(data, ctx); err != nil {
+		// Context is baked into this error, and we don't want to
+		// wrap it so the error type is always *RemoteError.
 		return err
 	}
 	if err := json.Unmarshal(data, response); err != nil {
-		return err
+		return errors.Wrap(err, ctx)
 	}
 	return nil
 }

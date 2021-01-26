@@ -9,8 +9,6 @@ import (
 
 const DefaultTimeout = time.Second * 10
 
-var RemoteCallError = errors.New("the server returned with an error")
-
 type ControllerDeviceStatus struct {
 	StatusPaginatedResponse
 
@@ -114,7 +112,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 	for _, dev := range devicesResponse {
 		props, err := GetDeviceProperties(sessInfo.AccessToken, dev.ProductID, dev.ID)
 		if err != nil {
-			if _, ok := err.(*RemoteError); !ok {
+			if !IsPropertyNotExistsError(err) {
 				return nil, err
 			}
 			continue

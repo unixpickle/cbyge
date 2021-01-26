@@ -253,7 +253,17 @@ func (s *Server) refreshDevices() ([]*cbyge.ControllerDevice, error) {
 	}
 	devs, err := ctrl.Devices()
 	if err != nil {
-		return nil, err
+		if !cbyge.IsAccessTokenError(err) {
+			return nil, err
+		}
+		err = s.refreshSession()
+		if err != nil {
+			return nil, err
+		}
+		devs, err = ctrl.Devices()
+		if err != nil {
+			return nil, err
+		}
 	}
 	s.devicesLock.Lock()
 	s.devices = devs
@@ -278,6 +288,16 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 		s.controllerExpire = time.Now().Add(SessionExpiration)
 	}
 	return s.controller, err
+}
+
+func (s *Server) refreshSession() error {
+	s.controllerLock.Lock()
+	defer s.controllerLock.Unlock()
+	err := s.controller.Login(s.Email, s.Password)
+	if err == nil {
+		s.controllerExpire = time.Now().Add(SessionExpiration)
+	}
+	return err
 }
 
 func encodeStatus(s cbyge.ControllerDeviceStatus) map[string]interface{} {
