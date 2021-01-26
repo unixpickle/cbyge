@@ -20,6 +20,8 @@ const SessionExpiration = time.Hour / 2
 func main() {
 	s := &Server{}
 	var addr string
+	var assets string
+	flag.StringVar(&assets, "assets", "assets", "assets directory")
 	flag.StringVar(&addr, "addr", ":8080", "address to listen on")
 	flag.StringVar(&s.Email, "email", "", "C by GE account email")
 	flag.StringVar(&s.Password, "password", "", "C by GE account password")
@@ -35,6 +37,7 @@ func main() {
 		s.WebPassword = s.Password
 	}
 
+	http.Handle("/", s.Auth(http.FileServer(http.Dir(assets)).ServeHTTP))
 	http.Handle("/api/devices", s.Auth(s.HandleDevices))
 	http.Handle("/api/device/status", s.Auth(s.HandleDeviceStatus))
 	http.Handle("/api/device/set_on", s.Auth(s.HandleDeviceSetOn))
@@ -60,11 +63,21 @@ type Server struct {
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pass := r.FormValue("auth")
-		if subtle.ConstantTimeCompare([]byte(pass), []byte(s.WebPassword)) != 1 {
-			s.serveError(w, http.StatusForbidden, "incorrect 'auth' parameter")
-		} else {
-			handler(w, r)
+
+		if pass == "" {
+			// Most likely a front-end request.
+			_, pass, ok := r.BasicAuth()
+			if !ok || subtle.ConstantTimeCompare([]byte(pass), []byte(s.WebPassword)) != 1 {
+				w.Header().Set("WWW-Authenticate", `Basic realm="bad credentials"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte("Unauthorised.\n"))
+				return
+			}
+		} else if subtle.ConstantTimeCompare([]byte(pass), []byte(s.WebPassword)) != 1 {
+			s.serveError(w, http.StatusUnauthorized, "incorrect 'auth' parameter")
+			return
 		}
+		handler(w, r)
 	})
 }
 

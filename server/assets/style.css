@@ -1,0 +1,86 @@
+html, body {
+    margin: 0;
+    border: 0;
+    font-family: sans-serif;
+
+    background-color: #f0f0f0;
+}
+
+#devices {
+    display: block;
+    margin: 0 auto;
+    max-width: 500px;
+}
+
+.device {
+    position: relative;
+    margin: 15px 0;
+    box-sizing: border-box;
+    min-height: 50px;
+    padding: 10px;
+    background-color: white;
+    box-shadow: 0 0 5px 0px rgba(0, 0, 0, 0.3);
+}
+
+.device-loading {
+    pointer-events: none;
+}
+
+.device-loading::after {
+    content: 'Loading...';
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    padding-top: 10px;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    color: white;
+    font-weight: bolder;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.device-name, .device-error {
+    width: calc(100% - 100px);
+}
+
+.device-name {
+    font-weight: bolder;
+    display: block;
+}
+
+.device-error {
+    color: #ff6f6f;
+    display: block;
+}
+
+.device-on-off {
+    position: absolute;
+    right: 10px;
+    top: calc(50% - 15px);
+    width: 60px;
+    height: 30px;
+    background-color: #d5d5d5;
+    border-radius: 15px;
+}
+
+.device-on-off::after {
+    position: absolute;
+    content: ' ';
+    display: block;
+    left: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    background-color: #8f8c8c;
+}
+
+.device-on-off-on {
+    background-color: #4acef3;
+}
+
+.device-on-off-on::after {
+    left: 30px;
+}
