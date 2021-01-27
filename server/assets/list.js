@@ -46,6 +46,13 @@
             this.element.appendChild(this.onOff);
             this.onOff.addEventListener('click', () => this.toggleOnOff());
 
+            this.colorControls = document.createElement('div');
+            this.colorControls.className = 'device-color-controls';
+            this.brightnessButton = document.createElement('button');
+            this.brightnessButton.className = 'brightness-button device-color-controls-button';
+            this.colorControls.appendChild(this.brightnessButton);
+            this.element.appendChild(this.colorControls);
+
             this.error = document.createElement('label');
             this.error.className = 'device-error';
             this.error.style.display = 'none';
@@ -61,6 +68,7 @@
             } else {
                 this.onOff.classList.remove('device-on-off-on');
             }
+            this.brightnessButton.textContent = status["brightness"] + "%";
             // TODO: look at color, brightness, etc.
         }
 
