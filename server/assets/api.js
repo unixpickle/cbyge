@@ -16,6 +16,12 @@
             const url = '/api/device/set_on?id=' + encoded + '&on=' + onStr;
             return (await apiCall(url))[0];
         }
+
+        async setBrightness(deviceID, lum) {
+            const encoded = encodeURIComponent(deviceID);
+            const url = '/api/device/set_brightness?id=' + encoded + '&brightness=' + lum;
+            return (await apiCall(url))[0];
+        }
     }
 
     async function apiCall(url) {

@@ -6,11 +6,23 @@ html, body {
     background-color: #f0f0f0;
 }
 
+button:focus {
+    outline: 0;
+}
+
 #devices {
     display: block;
     margin: 0 auto;
     max-width: 500px;
     width: calc(100% - 30px);
+}
+
+.devices-loading {
+    background-color: white;
+    text-align: center;
+    padding: 10px;
+    margin: 10px auto;
+    box-shadow: 0 0 5px 0px rgba(0, 0, 0, 0.3);
 }
 
 .device {
@@ -84,4 +96,102 @@ html, body {
 
 .device-on-off-on::after {
     left: 30px;
+}
+
+.device-color-controls-button {
+    position: relative;
+    height: 30px;
+    padding: 0 15px 0 30px;
+    border: 1px solid #65bcd4;
+    border-radius: 15px;
+    cursor: pointer;
+    background-color: white;
+    margin: 10px 10px 0 0;
+}
+
+.device-color-controls-button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.device-color-controls-button::before {
+    content: ' ';
+    display: block;
+    position: absolute; 
+    top: 5px;
+    left: 5px;
+    background-size: 20px 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.brightness-button::before {
+    background-image: url('svg/brightness.svg');
+}
+
+.popup-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.popup-window {
+    position: absolute;
+    top: calc(50% - 75px);
+    left: calc(50% - 150px);
+    width: 300px;
+    height: 150px;
+    box-sizing: border-box;
+    padding: 10px;
+    background-color: white;
+    box-shadow: 0 0 10px 0px rgba(0, 0, 0, 0.3);
+}
+
+.popup-buttons {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: calc(100% - 20px);
+    height: 40px;
+    text-align: center;
+}
+
+.popup-button {
+    box-sizing: border-box;
+    height: 40px;
+    border: none;
+    color: white;
+    margin: 0 5px;
+    font-size: 1.1em;
+    padding: 0 20px;
+    cursor: pointer;
+}
+
+.popup-button-ok {
+    background-color: #65bcd4;
+}
+
+.popup-button-ok:hover {
+    background-color: #55acc4;
+}
+
+.popup-button-cancel {
+    background-color: #555555;
+}
+
+.popup-button-cancel:hover {
+    background-color: #444444;
+}
+
+.popup-slider {
+    display: block;
+    width: 100%;
+}
+
+.popup-slider-label {
+    display: block;
+    width: 100%;
+    text-align: center;
 }

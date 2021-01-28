@@ -20,10 +20,7 @@
 
         showError(err) {
             this.element.innerHTML = '';
-
-            const errorElem = document.createElement('div');
-            errorElem.className = 'devices-error';
-            errorElem.textContent = err;
+            const errorElem = makeElem('div', 'devices-error', { textContent: err });
             this.element.appendChild(errorElem);
         }
     }
@@ -33,28 +30,25 @@
             this.info = info;
             this.status = null;
 
-            this.element = document.createElement('div');
-            this.element.className = 'device';
+            this.element = makeElem('div', 'device');
 
-            this.name = document.createElement('label');
-            this.name.className = 'device-name';
-            this.name.textContent = info.name;
+            this.name = makeElem('label', 'device-name', { textContent: info.name });
             this.element.appendChild(this.name);
 
-            this.onOff = document.createElement('div');
-            this.onOff.className = 'device-on-off';
+            this.onOff = makeElem('div', 'device-on-off');
             this.element.appendChild(this.onOff);
             this.onOff.addEventListener('click', () => this.toggleOnOff());
 
-            this.colorControls = document.createElement('div');
-            this.colorControls.className = 'device-color-controls';
-            this.brightnessButton = document.createElement('button');
-            this.brightnessButton.className = 'brightness-button device-color-controls-button';
+            this.colorControls = makeElem('div', 'device-color-controls');
+            this.brightnessButton = makeElem(
+                'button',
+                'brightness-button device-color-controls-button',
+            );
+            this.brightnessButton.addEventListener('click', () => this.editBrightness());
             this.colorControls.appendChild(this.brightnessButton);
             this.element.appendChild(this.colorControls);
 
-            this.error = document.createElement('label');
-            this.error.className = 'device-error';
+            this.error = makeElem('label', 'device-error');
             this.error.style.display = 'none';
             this.element.appendChild(this.error);
         }
@@ -84,6 +78,14 @@
 
         toggleOnOff() {
             this.doCall(lightAPI.setOnOff(this.info.id, !this.status['is_on']));
+        }
+
+        editBrightness() {
+            const popup = new window.controlPopups.BrightnessPopup(this.status['brightness']);
+            popup.onBrightness = (value) => {
+                this.doCall(lightAPI.setBrightness(this.info.id, value));
+            };
+            popup.open();
         }
 
         doCall(promise) {

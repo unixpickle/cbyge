@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     version="1.1"
+     viewBox="0 0 20 20">
+    <defs>
+        <path id="rays" stroke="#999999" fill="none"
+              stroke-width="1" stroke-linecap="round"
+              d="M2,10 h3 M18,10 h-3 M10,2 v3 M10,18 v-3" />
+    </defs>
+    <use xlink:href="#rays" />
+    <use xlink:href="#rays" transform="rotate(45 10 10)" />
+    <circle cx="10" cy="10" r="3" fill="#999999" />
+</svg>
