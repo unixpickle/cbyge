@@ -107,6 +107,7 @@ button:focus {
     cursor: pointer;
     background-color: white;
     margin: 10px 10px 0 0;
+    vertical-align: top;
 }
 
 .device-color-controls-button:hover {
@@ -126,6 +127,18 @@ button:focus {
 
 .brightness-button::before {
     background-image: url('svg/brightness.svg');
+}
+
+.color-button::before {
+    background-image: url('svg/color.svg');
+}
+
+.color-button-swatch {
+    display: inline-block;
+    margin-top: 5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
 }
 
 .popup-container {

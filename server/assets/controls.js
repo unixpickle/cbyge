@@ -74,7 +74,7 @@
         }
     }
 
-    class ColorPopup {
+    class ColorPopup extends ControlPopup {
         constructor(status) {
             super();
 
