@@ -97,7 +97,7 @@
                 max: 100,
                 value: 50,
             });
-            this.toneLabel = makeElem('input', 'popup-slider-label', { textContent: '50%' });
+            this.toneLabel = makeElem('label', 'popup-slider-label', { textContent: '50%' });
             this.toneSlider.addEventListener('input', () => {
                 this.toneLabel.textContent = this.toneSlider.value + '%';
             });

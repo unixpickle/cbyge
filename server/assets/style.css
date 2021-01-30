@@ -219,15 +219,24 @@ button:focus {
 
 .popup-tabs {
     text-align: center;
+    margin-bottom: 5px;
 }
 
 .popup-tabs-tab {
     vertical-align: top;
-    padding: 5px 10px;
+    padding: 0 20px;
+    line-height: 30px;
+    width: 50%;
+    height: 40px;
     border: none;
     font-size: 1.1em;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    color: #555;
 }
 
 .popup-tabs-selected {
-    color: #65bcd4;
+    background-color: #65bcd4;
+    color: white;
+    font-weight: bolder;
 }
