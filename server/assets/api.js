@@ -22,6 +22,19 @@
             const url = '/api/device/set_brightness?id=' + encoded + '&brightness=' + lum;
             return (await apiCall(url))[0];
         }
+
+        async setTone(deviceID, tone) {
+            const encoded = encodeURIComponent(deviceID);
+            const url = '/api/device/set_color_tone?id=' + encoded + '&color_tone=' + tone;
+            return (await apiCall(url))[0];
+        }
+
+        async setRGB(deviceID, rgb) {
+            const [r, g, b] = rgb;
+            const encoded = encodeURIComponent(deviceID);
+            const url = '/api/device/set_rgb?id=' + encoded + '&r=' + r + '&g=' + g + '&b=' + b;
+            return (await apiCall(url))[0];
+        }
     }
 
     async function apiCall(url) {

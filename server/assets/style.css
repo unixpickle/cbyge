@@ -152,14 +152,19 @@ button:focus {
 
 .popup-window {
     position: absolute;
-    top: calc(50% - 75px);
+    top: calc(50% - 90px);
     left: calc(50% - 150px);
     width: 300px;
-    height: 150px;
+    height: 180px;
     box-sizing: border-box;
     padding: 10px;
     background-color: white;
     box-shadow: 0 0 10px 0px rgba(0, 0, 0, 0.3);
+}
+
+.popup-window-small {
+    top: calc(50% - 75px);
+    height: 150px;
 }
 
 .popup-buttons {
@@ -219,7 +224,7 @@ button:focus {
 
 .popup-tabs {
     text-align: center;
-    margin-bottom: 5px;
+    margin-bottom: 10px;
 }
 
 .popup-tabs-tab {
@@ -239,4 +244,9 @@ button:focus {
     background-color: #65bcd4;
     color: white;
     font-weight: bolder;
+}
+
+.popup-color-picker {
+    display: block;
+    margin: auto;
 }

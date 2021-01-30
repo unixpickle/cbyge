@@ -48,6 +48,8 @@
         constructor(brightness) {
             super();
 
+            this.dialog.classList.add('popup-window-small');
+
             this.onBrightness = (_value) => null;
 
             this.slider = makeElem('input', 'popup-slider', {
@@ -118,7 +120,7 @@
                 this.rgbInput.value = rgbToHex(status['rgb']);
             } else {
                 this.toneSlider.value = status['color_tone'];
-                this.toneLabel.value = status['color_tone'] + '%';
+                this.toneLabel.textContent = status['color_tone'] + '%';
             }
             this.showTab(status['use_rgb']);
         }

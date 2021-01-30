@@ -104,10 +104,10 @@
         editColor() {
             const popup = new window.controlPopups.ColorPopup(this.status);
             popup.onRGB = (rgb) => {
-                // TODO: this.
+                this.doCall(lightAPI.setRGB(this.info.id, rgb));
             };
             popup.onTone = (tone) => {
-                // TODO: this.
+                this.doCall(lightAPI.setTone(this.info.id, tone));
             };
             popup.open();
         }
