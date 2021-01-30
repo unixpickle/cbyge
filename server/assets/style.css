@@ -208,3 +208,26 @@ button:focus {
     width: 100%;
     text-align: center;
 }
+
+.popup-tab-pane {
+    display: none;
+}
+
+.popup-tab-pane-current {
+    display: block;
+}
+
+.popup-tabs {
+    text-align: center;
+}
+
+.popup-tabs-tab {
+    vertical-align: top;
+    padding: 5px 10px;
+    border: none;
+    font-size: 1.1em;
+}
+
+.popup-tabs-selected {
+    color: #65bcd4;
+}
