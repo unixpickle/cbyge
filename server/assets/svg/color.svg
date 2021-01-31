@@ -2,9 +2,9 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      version="1.1"
      viewBox="0 0 20 20">
-    <path d="M1,10 a9,9 0,1,1 0,0.0001 z
-             M3,10 a2,2 0,1,1 0,0.0001 z
-             M13,10 a2,2 0,1,1 0,0.0001 z
-             M8,15 a2,2 0,1,1 0,0.0001 z
-             M8,5 a2,2 0,1,1 0,0.0001 z" fill="#999999" fill-rule="evenodd" />
+    <circle cx="10" cy="10" r="9" fill="#999999" />
+    <circle cx="5" cy="10" r="2" fill="#ee9999" />
+    <circle cx="15" cy="10" r="2" fill="#99ee99" />
+    <circle cx="10" cy="5" r="2" fill="#77aaee" />
+    <circle cx="10" cy="15" r="2" fill="#eeee99" />
 </svg>
