@@ -1,8 +1,5 @@
 (function () {
 
-    const TONE_0 = [255, 196, 0];
-    const TONE_100 = [166, 234, 245];
-
     class DeviceList {
         constructor() {
             this.element = document.getElementById('devices');
@@ -131,12 +128,7 @@
         if (status['use_rgb']) {
             return rgbToHex(status['rgb']);
         } else {
-            const frac = Math.min(100, status['color_tone'] / 100);
-            const rgb = TONE_0.map((x0, i) => {
-                const x1 = TONE_100[i];
-                return Math.round(frac * x1 + (1 - frac) * x0);
-            });
-            return rgbToHex(rgb);
+            return toneColor(status['color_tone']);
         }
     }
 
