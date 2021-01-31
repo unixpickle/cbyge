@@ -55,6 +55,15 @@ button:focus {
     background-color: rgba(0, 0, 0, 0.7);
 }
 
+.device-offline .device-color-controls {
+    display: none;
+}
+
+.device-offline .device-on-off {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 .device-name, .device-error {
     width: calc(100% - 100px);
 }

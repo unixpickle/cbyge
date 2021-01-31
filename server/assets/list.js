@@ -70,19 +70,24 @@
             this.status = status;
             this.element.classList.remove('device-loading');
             this.error.style.display = 'none';
-            if (status["is_on"]) {
-                this.onOff.classList.add('device-on-off-on');
+            if (status === null) {
+                this.element.classList.add('device-offline');
             } else {
-                this.onOff.classList.remove('device-on-off-on');
+                this.element.classList.remove('device-offline');
+                if (status["is_on"]) {
+                    this.onOff.classList.add('device-on-off-on');
+                } else {
+                    this.onOff.classList.remove('device-on-off-on');
+                }
+                this.brightnessButton.textContent = status["brightness"] + "%";
+                this.colorButtonSwatch.style.backgroundColor = previewColor(status);
             }
-            this.brightnessButton.textContent = status["brightness"] + "%";
-            this.colorButtonSwatch.style.backgroundColor = previewColor(status);
         }
 
         showError(err) {
+            this.updateStatus(null);
             this.error.textContent = err;
             this.error.style.display = 'block';
-            this.element.classList.remove('device-loading');
         }
 
         fetchUpdate() {
