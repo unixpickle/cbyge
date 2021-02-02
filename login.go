@@ -21,6 +21,26 @@ const (
 	devicePropertyURL = "https://api2.xlink.cn/v2/product/%s/device/%d/property"
 )
 
+type OptionalDate struct {
+	Date *time.Time
+}
+
+func (o *OptionalDate) UnmarshalJSON(d []byte) error {
+	if bytes.Equal(d, []byte("null")) {
+		o.Date = nil
+		return nil
+	}
+	var dateStr string
+	if err := json.Unmarshal(d, &dateStr); err != nil {
+		return err
+	}
+	if dateStr == "" {
+		o.Date = nil
+		return nil
+	}
+	return json.Unmarshal(d, &o.Date)
+}
+
 type SessionInfo struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -30,44 +50,44 @@ type SessionInfo struct {
 }
 
 type UserInfo struct {
-	Gender          int        `json:"gender"`
-	ActiveDate      *time.Time `json:"active_date"`
-	Source          int        `json:"source"`
-	PasswordInited  bool       `json:"passwd_inited"`
-	IsValid         bool       `json:"is_valid"`
-	Nickname        string     `json:"nickname"`
-	ID              int        `json:"id"`
-	CreateDate      *time.Time `json:"create_date"`
-	Email           string     `json:"email"`
-	RegionID        int        `json:"region_id"`
-	AuthorizeCode   string     `json:"authorize_code"`
-	CertificateNo   string     `json:"certificate_no"`
-	CertificateType int        `json:"certificate_type"`
-	CorpID          string     `json:"corp_id"`
-	PrivacyCode     string     `json:"privacy_code"`
-	Account         string     `json:"account"`
-	Age             int        `json:"age"`
-	Status          int        `json:"status"`
+	Gender          int          `json:"gender"`
+	ActiveDate      OptionalDate `json:"active_date"`
+	Source          int          `json:"source"`
+	PasswordInited  bool         `json:"passwd_inited"`
+	IsValid         bool         `json:"is_valid"`
+	Nickname        string       `json:"nickname"`
+	ID              int          `json:"id"`
+	CreateDate      OptionalDate `json:"create_date"`
+	Email           string       `json:"email"`
+	RegionID        int          `json:"region_id"`
+	AuthorizeCode   string       `json:"authorize_code"`
+	CertificateNo   string       `json:"certificate_no"`
+	CertificateType int          `json:"certificate_type"`
+	CorpID          string       `json:"corp_id"`
+	PrivacyCode     string       `json:"privacy_code"`
+	Account         string       `json:"account"`
+	Age             int          `json:"age"`
+	Status          int          `json:"status"`
 }
 
 type DeviceInfo struct {
-	AccessKey       int64     `json:"access_key"`
-	ActiveCode      string    `json:"active_code"`
-	ActiveDate      time.Time `json:"active_date"`
-	AuthorizeCode   string    `json:"authorize_code"`
-	FirmwareVersion int       `json:"firmware_version"`
-	Groups          string    `json:"groups"`
-	ID              uint32    `json:"id"`
-	IsActive        bool      `json:"is_active"`
-	IsOnline        bool      `json:"is_online"`
-	LastLogin       string    `json:"last_login"`
-	MAC             string    `json:"mac"`
-	MCUVersion      int       `json:"mcu_version"`
-	Name            string    `json:"name"`
-	ProductID       string    `json:"product_id"`
-	Role            int       `json:"role"`
-	Source          int       `json:"source"`
-	SubscribeDate   string    `json:"subscribe_date"`
+	AccessKey       int64        `json:"access_key"`
+	ActiveCode      string       `json:"active_code"`
+	ActiveDate      OptionalDate `json:"active_date"`
+	AuthorizeCode   string       `json:"authorize_code"`
+	FirmwareVersion int          `json:"firmware_version"`
+	Groups          string       `json:"groups"`
+	ID              uint32       `json:"id"`
+	IsActive        bool         `json:"is_active"`
+	IsOnline        bool         `json:"is_online"`
+	LastLogin       OptionalDate `json:"last_login"`
+	MAC             string       `json:"mac"`
+	MCUVersion      int          `json:"mcu_version"`
+	Name            string       `json:"name"`
+	ProductID       string       `json:"product_id"`
+	Role            int          `json:"role"`
+	Source          int          `json:"source"`
+	SubscribeDate   string       `json:"subscribe_date"`
 }
 
 type DeviceProperties struct {
