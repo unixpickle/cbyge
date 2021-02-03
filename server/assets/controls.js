@@ -2,6 +2,7 @@
 
     class ControlPopup {
         constructor() {
+            const content = this.createContent();
             this.cancelButton = makeElem('button', 'popup-button popup-button-cancel', {
                 textContent: 'Cancel',
             });
@@ -9,7 +10,7 @@
                 textContent: 'Save',
             });
             this.buttons = makeElem('div', 'popup-buttons', {}, [this.cancelButton, this.okButton]);
-            this.content = makeElem('div', 'popup-content');
+            this.content = makeElem('div', 'popup-content', {}, content);
             this.dialog = makeElem('div', 'popup-window', {}, [this.content, this.buttons]);
             this.element = makeElem('div', 'popup-container', {}, [this.dialog]);
 
@@ -17,6 +18,11 @@
             this.element.addEventListener('click', () => this.close());
             this.okButton.addEventListener('click', () => this.confirm());
             this.cancelButton.addEventListener('click', () => this.close());
+        }
+
+        createContent() {
+            // Override in a sub-class.
+            return [];
         }
 
         open() {
@@ -37,25 +43,23 @@
             super();
 
             this.dialog.classList.add('popup-window-small');
-
             this.onBrightness = (_value) => null;
+        }
 
+        createContent() {
             this.slider = makeElem('input', 'popup-slider', {
                 type: 'range',
                 min: 1,
                 max: 100,
                 value: brightness,
             });
-            this.content.appendChild(this.slider);
-
             this.label = makeElem('label', 'popup-slider-label', {
                 textContent: brightness + "%",
             });
-            this.content.appendChild(this.label);
-
             this.slider.addEventListener('input', () => {
                 this.label.textContent = this.slider.value + '%';
             });
+            return [this.slider, this.label];
         }
 
         confirm() {
@@ -71,10 +75,20 @@
             this.onRGB = (_value) => null;
             this.onTone = (_value) => null;
 
+            this.useRGB = status['use_rgb'];
+            if (this.useRGB) {
+                this.rgbInput.value = rgbToHex(status['rgb']);
+            } else {
+                this.toneSlider.value = status['color_tone'];
+                this.toneLabel.textContent = status['color_tone'] + '%';
+            }
+            this.showTab(status['use_rgb']);
+        }
+
+        createContent() {
             this.toneTab = makeElem('button', 'popup-tabs-tab', { textContent: 'Tone' });
             this.rgbTab = makeElem('button', 'popup-tabs-tab', { textContent: 'RGB' });
             this.tabs = makeElem('div', 'popup-tabs', {}, [this.toneTab, this.rgbTab]);
-            this.content.appendChild(this.tabs);
             this.toneTab.addEventListener('click', () => this.showTab(false));
             this.rgbTab.addEventListener('click', () => this.showTab(true));
 
@@ -91,23 +105,14 @@
             this.tonePane = makeElem('div', 'popup-tab-pane', {}, [
                 this.toneSlider, this.toneLabel,
             ]);
-            this.content.appendChild(this.tonePane);
 
             this.rgbInput = makeElem('input', 'popup-color-picker', {
                 type: 'color',
                 value: '#00ff00',
             });
             this.rgbPane = makeElem('div', 'popup-tab-pane', {}, [this.rgbInput]);
-            this.content.appendChild(this.rgbPane);
 
-            this.useRGB = status['use_rgb'];
-            if (this.useRGB) {
-                this.rgbInput.value = rgbToHex(status['rgb']);
-            } else {
-                this.toneSlider.value = status['color_tone'];
-                this.toneLabel.textContent = status['color_tone'] + '%';
-            }
-            this.showTab(status['use_rgb']);
+            return [this.tabs, this.tonePane, this.rgbPane];
         }
 
         showTab(useRGB) {
