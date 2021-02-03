@@ -2,13 +2,16 @@ const TONE_0 = [255, 196, 0];
 const TONE_50 = [255, 255, 128];
 const TONE_100 = [166, 234, 245];
 
-function makeElem(elem, className, attrs) {
+function makeElem(elem, className, attrs, children) {
     const res = document.createElement(elem);
     res.className = className;
     if (attrs) {
         Object.keys(attrs).forEach((key) => {
             res[key] = attrs[key];
         });
+    }
+    if (children) {
+        children.forEach((child) => res.appendChild(child));
     }
     return res;
 }

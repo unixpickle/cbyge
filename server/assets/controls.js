@@ -2,33 +2,21 @@
 
     class ControlPopup {
         constructor() {
-            this.element = makeElem('div', 'popup-container');
-            this.dialog = makeElem('div', 'popup-window');
-            this.dialog.className = 'popup-window'
-            this.element.appendChild(this.dialog);
-
-            this.buttons = makeElem('div', 'popup-buttons');
             this.cancelButton = makeElem('button', 'popup-button popup-button-cancel', {
                 textContent: 'Cancel',
             });
             this.okButton = makeElem('button', 'popup-button popup-button-ok', {
                 textContent: 'Save',
             });
-            this.buttons.appendChild(this.cancelButton);
-            this.buttons.appendChild(this.okButton);
-
+            this.buttons = makeElem('div', 'popup-buttons', {}, [this.cancelButton, this.okButton]);
             this.content = makeElem('div', 'popup-content');
-            this.dialog.appendChild(this.content);
-            this.dialog.appendChild(this.buttons);
+            this.dialog = makeElem('div', 'popup-window', {}, [this.content, this.buttons]);
+            this.element = makeElem('div', 'popup-container', {}, [this.dialog]);
 
-            this.okButton.addEventListener('click', () => this.confirm());
-            this.cancelButton.addEventListener('click', () => this.close());
             this.dialog.addEventListener('click', (e) => e.stopPropagation());
             this.element.addEventListener('click', () => this.close());
-        }
-
-        createContent() {
-            // Override in a sub-class to append controls.
+            this.okButton.addEventListener('click', () => this.confirm());
+            this.cancelButton.addEventListener('click', () => this.close());
         }
 
         open() {
@@ -83,16 +71,13 @@
             this.onRGB = (_value) => null;
             this.onTone = (_value) => null;
 
-            this.tabs = makeElem('div', 'popup-tabs');
             this.toneTab = makeElem('button', 'popup-tabs-tab', { textContent: 'Tone' });
             this.rgbTab = makeElem('button', 'popup-tabs-tab', { textContent: 'RGB' });
-            this.tabs.appendChild(this.toneTab);
-            this.tabs.appendChild(this.rgbTab);
+            this.tabs = makeElem('div', 'popup-tabs', {}, [this.toneTab, this.rgbTab]);
             this.content.appendChild(this.tabs);
             this.toneTab.addEventListener('click', () => this.showTab(false));
             this.rgbTab.addEventListener('click', () => this.showTab(true));
 
-            this.tonePane = makeElem('div', 'popup-tab-pane');
             this.toneSlider = makeElem('input', 'popup-slider', {
                 type: 'range',
                 min: 0,
@@ -103,16 +88,16 @@
             this.toneSlider.addEventListener('input', () => {
                 this.toneLabel.textContent = this.toneSlider.value + '%';
             });
-            this.tonePane.appendChild(this.toneSlider);
-            this.tonePane.appendChild(this.toneLabel);
+            this.tonePane = makeElem('div', 'popup-tab-pane', {}, [
+                this.toneSlider, this.toneLabel,
+            ]);
             this.content.appendChild(this.tonePane);
 
-            this.rgbPane = makeElem('div', 'popup-tab-pane');
             this.rgbInput = makeElem('input', 'popup-color-picker', {
                 type: 'color',
                 value: '#00ff00',
             });
-            this.rgbPane.appendChild(this.rgbInput);
+            this.rgbPane = makeElem('div', 'popup-tab-pane', {}, [this.rgbInput]);
             this.content.appendChild(this.rgbPane);
 
             this.useRGB = status['use_rgb'];

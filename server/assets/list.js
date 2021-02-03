@@ -30,37 +30,33 @@
             this.info = info;
             this.status = null;
 
-            this.element = makeElem('div', 'device');
-
             this.name = makeElem('label', 'device-name', { textContent: info.name });
-            this.element.appendChild(this.name);
-
             this.onOff = makeElem('div', 'device-on-off');
-            this.element.appendChild(this.onOff);
             this.onOff.addEventListener('click', () => this.toggleOnOff());
-
-            this.colorControls = makeElem('div', 'device-color-controls');
-            this.element.appendChild(this.colorControls);
 
             this.brightnessButton = makeElem(
                 'button',
                 'brightness-button device-color-controls-button',
             );
             this.brightnessButton.addEventListener('click', () => this.editBrightness());
-            this.colorControls.appendChild(this.brightnessButton);
-
+            this.colorButtonSwatch = makeElem('div', 'color-button-swatch');
             this.colorButton = makeElem(
                 'button',
                 'color-button device-color-controls-button',
+                {},
+                [this.colorButtonSwatch],
             );
-            this.colorButtonSwatch = makeElem('div', 'color-button-swatch');
-            this.colorButton.appendChild(this.colorButtonSwatch);
             this.colorButton.addEventListener('click', () => this.editColor());
-            this.colorControls.appendChild(this.colorButton);
+            this.colorControls = makeElem('div', 'device-color-controls', {}, [
+                this.brightnessButton, this.colorButton,
+            ]);
 
             this.error = makeElem('label', 'device-error');
             this.error.style.display = 'none';
-            this.element.appendChild(this.error);
+
+            this.element = makeElem('div', 'device', {}, [
+                this.name, this.onOff, this.colorControls, this.error,
+            ]);
         }
 
         updateStatus(status) {
