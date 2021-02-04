@@ -305,7 +305,16 @@ func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
 	timeout := time.After(c.timeout)
 	for {
 		select {
-		case packet := <-packets:
+		case packet, ok := <-packets:
+			if !ok {
+				// Could be a race condition between packets and errChan.
+				select {
+				case err := <-errChan:
+					return err
+				default:
+					return errors.New("connection closed")
+				}
+			}
 			if f(packet) {
 				return nil
 			}
