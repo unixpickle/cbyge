@@ -1,6 +1,7 @@
 package cbyge
 
 import (
+	"encoding/binary"
 	"sync"
 	"time"
 
@@ -123,12 +124,12 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 				switchID: bulb.SwitchID,
 				name:     bulb.DisplayName,
 			}
-			// Update device status. If this fails, we swallow the error
-			// because the device is automatically marked offline.
-			c.DeviceStatus(cd)
 			results = append(results, cd)
 		}
 	}
+	// Update device status. If this fails, we swallow the error
+	// because the device(s) are automatically marked offline.
+	c.DeviceStatuses(results)
 	return results, nil
 }
 
@@ -140,7 +141,7 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 	var responsePacket []StatusPaginatedResponse
 	var decodeErr error
 	packet := NewPacketGetStatusPaginated(d.switchID, 0)
-	err := c.callAndWait([]*Packet{packet}, func(p *Packet) bool {
+	err := c.callAndWait([]*Packet{packet}, true, func(p *Packet) bool {
 		if IsStatusPaginatedResponse(p) {
 			responsePacket, decodeErr = DecodeStatusPaginatedResponse(p)
 			return true
@@ -168,6 +169,73 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 	d.lastStatus = status
 	d.lastStatusLock.Unlock()
 	return status, nil
+}
+
+// DeviceStatuses gets the status for previously enumerated devices.
+//
+// Each device will have its own status, and can have an independent error
+// when fetching the status.
+func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDeviceStatus, []error) {
+	deviceStatuses := make([]ControllerDeviceStatus, len(devs))
+	deviceErrors := make([]error, len(devs))
+	hasResponses := make([]bool, len(devs))
+
+	packets := make([]*Packet, len(devs))
+	idToIndex := map[uint32]int{}
+	for i, d := range devs {
+		idToIndex[d.switchID] = i
+		packets[i] = NewPacketGetStatusPaginated(d.switchID, uint16(i))
+	}
+	err := c.callAndWait(packets, false, func(p *Packet) bool {
+		if IsStatusPaginatedResponse(p) {
+			deviceID := binary.BigEndian.Uint32(p.Data[:4])
+			devIdx, ok := idToIndex[deviceID]
+			if !ok || hasResponses[devIdx] {
+				return false
+			}
+			hasResponses[devIdx] = true
+			response, err := DecodeStatusPaginatedResponse(p)
+			if err == nil && len(response) == 0 {
+				err = errors.New("lookup device status: no devices in response")
+			}
+			status := ControllerDeviceStatus{IsOnline: false}
+			if err != nil {
+				deviceErrors[devIdx] = err
+			} else {
+				status.IsOnline = true
+				status.StatusPaginatedResponse = response[0]
+				c.deviceIndicesLock.Lock()
+				c.deviceIndices[devs[devIdx].DeviceID()] = response[0].Device
+				c.deviceIndicesLock.Unlock()
+				devs[devIdx].lastStatusLock.Lock()
+				devs[devIdx].lastStatus = status
+				devs[devIdx].lastStatusLock.Unlock()
+			}
+			deviceStatuses[devIdx] = status
+		} else if p.IsResponse && len(p.Data) >= 4 && p.Data[len(p.Data)-1] != 0 {
+			// This is an error response.
+			deviceID := binary.BigEndian.Uint32(p.Data[:4])
+			devIdx, ok := idToIndex[deviceID]
+			if ok && !hasResponses[devIdx] {
+				hasResponses[devIdx] = true
+				deviceErrors[devIdx] = RemoteCallError
+			}
+		}
+		for _, hasResponse := range hasResponses {
+			if !hasResponse {
+				return false
+			}
+		}
+		return true
+	})
+	if err != nil {
+		for i, hasResponse := range hasResponses {
+			if !hasResponse {
+				deviceErrors[i] = err
+			}
+		}
+	}
+	return deviceStatuses, deviceErrors
 }
 
 // SetDeviceStatus turns on or off a device.
@@ -240,7 +308,7 @@ func (c *Controller) getDeviceIndex(d *ControllerDevice) (int, error) {
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
-	err := c.callAndWait([]*Packet{p}, func(p *Packet) bool {
+	err := c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
 		return p.Type == PacketTypePipe && p.IsResponse
 	})
 	if err != nil {
@@ -251,7 +319,7 @@ func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
 
 // callAndWait sends packets on a new PacketConn and waits until f returns
 // true on a response, or waits for a timeout.
-func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
+func (c *Controller) callAndWait(p []*Packet, checkError bool, f func(*Packet) bool) error {
 	c.packetConnLock.Lock()
 	defer c.packetConnLock.Unlock()
 
@@ -280,7 +348,7 @@ func (c *Controller) callAndWait(p []*Packet, f func(*Packet) bool) error {
 				errChan <- err
 				return
 			}
-			if packet.IsResponse {
+			if checkError && packet.IsResponse {
 				if len(packet.Data) > 0 {
 					if packet.Data[len(packet.Data)-1] != 0 {
 						errChan <- RemoteCallError
