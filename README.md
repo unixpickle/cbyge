@@ -10,9 +10,9 @@ The final products of this project are:
 
 The [server](server) directory is a self-contained web-app and JSON API endpoint for C by GE lightbulbs. The website looks like this:
 
-![Screenshot of the website](server/screenshot/lights.png)
+<img src="server/screenshot/lights.png" alt="Screenshot of the website" width="400">
 
-# Usage
+# Go API
 
 To create a session, simply do:
 
