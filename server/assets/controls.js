@@ -42,8 +42,12 @@
         constructor(brightness) {
             super();
 
-            this.dialog.classList.add('popup-window-small');
             this.onBrightness = (_value) => null;
+
+            this.slider.value = brightness;
+            this.updateLabel();
+
+            this.dialog.classList.add('popup-window-small');
         }
 
         createContent() {
@@ -51,15 +55,15 @@
                 type: 'range',
                 min: 1,
                 max: 100,
-                value: brightness,
+                value: 50,
             });
-            this.label = makeElem('label', 'popup-slider-label', {
-                textContent: brightness + "%",
-            });
-            this.slider.addEventListener('input', () => {
-                this.label.textContent = this.slider.value + '%';
-            });
+            this.label = makeElem('label', 'popup-slider-label', {});
+            this.slider.addEventListener('input', () => this.updateLabel());
             return [this.slider, this.label];
+        }
+
+        updateLabel() {
+            this.label.textContent = this.slider.value + '%';
         }
 
         confirm() {
