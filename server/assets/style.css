@@ -35,26 +35,6 @@ button:focus {
     box-shadow: 0 0 5px 0px rgba(0, 0, 0, 0.3);
 }
 
-.device-loading {
-    pointer-events: none;
-}
-
-.device-loading::after {
-    content: 'Loading...';
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    box-sizing: border-box;
-    padding-top: 10px;
-    width: 100%;
-    height: 100%;
-    text-align: center;
-    color: white;
-    font-weight: bolder;
-    background-color: rgba(0, 0, 0, 0.7);
-}
-
 .device-offline .device-color-controls {
     display: none;
 }
@@ -258,4 +238,52 @@ button:focus {
 .popup-color-picker {
     display: block;
     margin: auto;
+}
+
+.loading {
+    pointer-events: none;
+}
+
+.loader {
+    display: none;
+}
+
+.loading > .loader {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.loader::after {
+    content: ' ';
+    color: transparent;
+    font-size: 0;
+
+    display: block;
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    left: calc(50% - 20px);
+    top: calc(50% - 20px);
+
+    background-image: url('svg/loader.svg');
+    background-size: 40px 40px;
+
+    animation-name: rotate;
+    animation-duration: 1s;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }

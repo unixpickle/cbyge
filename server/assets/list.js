@@ -7,6 +7,7 @@
         }
 
         update(devices) {
+            this.element.classList.remove('loading');
             this.devices = [];
             this.element.innerHTML = '';
 
@@ -52,9 +53,10 @@
 
             this.error = makeElem('label', 'device-error');
             this.error.style.display = 'none';
+            this.loader = makeElem('div', 'loader');
 
             this.element = makeElem('div', 'device', {}, [
-                this.name, this.onOff, this.colorControls, this.error,
+                this.name, this.onOff, this.colorControls, this.error, this.loader,
             ]);
 
             if (info['status']['is_online']) {
@@ -68,6 +70,7 @@
         updateStatus(status) {
             this.status = status;
             this.element.classList.remove('device-loading');
+            this.element.classList.remove('loading');
             this.error.style.display = 'none';
             if (status === null) {
                 this.element.classList.add('device-offline');
@@ -118,6 +121,7 @@
 
         doCall(promise) {
             this.element.classList.add('device-loading');
+            this.element.classList.add('loading');
             promise.then((status) => {
                 this.updateStatus(status);
             }).catch((err) => {
