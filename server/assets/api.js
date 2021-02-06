@@ -2,7 +2,7 @@
 
     class API {
         getDevices() {
-            return apiCall('/api/devices');
+            return apiCall('/api/devices?update_status=1');
         }
 
         async getStatus(deviceID) {

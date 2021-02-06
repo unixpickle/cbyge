@@ -93,6 +93,14 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if r.FormValue("update_status") != "" {
+		ctrl, err := s.getController()
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		ctrl.DeviceStatuses(devs)
+	}
 	data := []map[string]interface{}{}
 	for _, d := range devs {
 		status := d.LastStatus()

@@ -14,7 +14,6 @@
                 const device = new Device(info);
                 this.element.appendChild(device.element);
                 this.devices.push(device);
-                device.fetchUpdate();
             });
         }
 
@@ -57,6 +56,8 @@
             this.element = makeElem('div', 'device', {}, [
                 this.name, this.onOff, this.colorControls, this.error,
             ]);
+
+            this.updateStatus(info['status']);
         }
 
         updateStatus(status) {
