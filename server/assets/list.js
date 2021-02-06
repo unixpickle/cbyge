@@ -57,7 +57,12 @@
                 this.name, this.onOff, this.colorControls, this.error,
             ]);
 
-            this.updateStatus(info['status']);
+            if (info['status']['is_online']) {
+                this.updateStatus(info['status']);
+            } else {
+                // Try again, get an error message.
+                this.fetchUpdate();
+            }
         }
 
         updateStatus(status) {
