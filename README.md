@@ -2,7 +2,15 @@
 
 For this project, I reverse engineered the "C by GE" app for controlling GE WiFi-connected smart lightbulbs. To do this, I started by decompiling the Android app, and then reverse engineered the binary protocol that the app uses to talk to a server. For more details, see [Reverse Engineering C by GE](#reverse-engineering-c-by-ge).
 
-The final product of this project is a high-level Go API for enumerating lightbulbs, getting their status, and changing their properties (e.g. brightness and color tone).
+The final products of this project are:
+  1. A web API and front-end website for controlling lightbulbs.
+  2. A high-level Go API for enumerating lightbulbs, getting their status, and changing their properties (e.g. brightness and color tone).
+
+# Website
+
+The [server](server) directory is a self-contained web-app and JSON API endpoint for C by GE lightbulbs. The website looks like this:
+
+![Screenshot of the website](server/screenshot/lights.png)
 
 # Usage
 
