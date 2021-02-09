@@ -175,6 +175,11 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 //
 // Each device will have its own status, and can have an independent error
 // when fetching the status.
+//
+// Each device's status is updated in d.LastStatus(), even if the status fetch
+// returns an error (in which case the status is marked as offline).
+// This is different than the behavior of DeviceStatus(), which does not set
+// d.LastStatus() if there is a fetching error.
 func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDeviceStatus, []error) {
 	deviceStatuses := make([]ControllerDeviceStatus, len(devs))
 	deviceErrors := make([]error, len(devs))
@@ -207,9 +212,6 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 				c.deviceIndicesLock.Lock()
 				c.deviceIndices[devs[devIdx].DeviceID()] = response[0].Device
 				c.deviceIndicesLock.Unlock()
-				devs[devIdx].lastStatusLock.Lock()
-				devs[devIdx].lastStatus = status
-				devs[devIdx].lastStatusLock.Unlock()
 			}
 			deviceStatuses[devIdx] = status
 		} else if p.IsResponse && len(p.Data) >= 4 && p.Data[len(p.Data)-1] != 0 {
@@ -234,6 +236,13 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 				deviceErrors[i] = err
 			}
 		}
+	}
+	// Update statuses, including offline statuses for devices that
+	// returned an error.
+	for i, status := range deviceStatuses {
+		devs[i].lastStatusLock.Lock()
+		devs[i].lastStatus = status
+		devs[i].lastStatusLock.Unlock()
 	}
 	return deviceStatuses, deviceErrors
 }
