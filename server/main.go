@@ -93,21 +93,24 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	statuses := make([]cbyge.ControllerDeviceStatus, len(devs))
+	for i, d := range devs {
+		statuses[i] = d.LastStatus()
+	}
 	if r.FormValue("update_status") != "" {
 		ctrl, err := s.getController()
 		if err != nil {
 			s.serveError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		ctrl.DeviceStatuses(devs)
+		statuses, _ = ctrl.DeviceStatuses(devs)
 	}
 	data := []map[string]interface{}{}
-	for _, d := range devs {
-		status := d.LastStatus()
+	for i, d := range devs {
 		data = append(data, map[string]interface{}{
 			"id":     d.DeviceID(),
 			"name":   d.Name(),
-			"status": encodeStatus(status),
+			"status": encodeStatus(statuses[i]),
 		})
 	}
 	s.serveObject(w, http.StatusOK, data)
