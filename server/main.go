@@ -27,6 +27,7 @@ func main() {
 	flag.StringVar(&s.Password, "password", "", "C by GE account password")
 	flag.StringVar(&s.WebPassword, "web-password", "",
 		"password for basic auth, if different than the account password")
+	flag.BoolVar(&s.NoAuth, "no-auth", false, "do not require any password")
 	flag.Parse()
 
 	if s.Email == "" || s.Password == "" {
@@ -51,6 +52,7 @@ type Server struct {
 	Email       string
 	Password    string
 	WebPassword string
+	NoAuth      bool
 
 	devicesLock sync.Mutex
 	devices     []*cbyge.ControllerDevice
@@ -62,6 +64,10 @@ type Server struct {
 
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.NoAuth {
+			handler(w, r)
+			return
+		}
 		pass := r.FormValue("auth")
 
 		if pass == "" {
