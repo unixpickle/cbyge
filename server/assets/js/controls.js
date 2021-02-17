@@ -119,7 +119,7 @@
 
         updateToneLabel() {
             this.toneLabel.textContent = this.toneSlider.value + '%';
-            this.toneLabel.style.color = toneColor(parseInt(this.toneSlider.value)();
+            this.toneLabel.style.color = toneColor(parseInt(this.toneSlider.value));
         }
 
         showTab(useRGB) {
