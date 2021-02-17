@@ -84,7 +84,7 @@
                 this.rgbInput.value = rgbToHex(status['rgb']);
             } else {
                 this.toneSlider.value = status['color_tone'];
-                this.toneLabel.textContent = status['color_tone'] + '%';
+                this.updateToneLabel();
             }
             this.showTab(status['use_rgb']);
         }
@@ -103,9 +103,7 @@
                 value: 50,
             });
             this.toneLabel = makeElem('label', 'popup-slider-label', { textContent: '50%' });
-            this.toneSlider.addEventListener('input', () => {
-                this.toneLabel.textContent = this.toneSlider.value + '%';
-            });
+            this.toneSlider.addEventListener('input', () => this.updateToneLabel());
             this.tonePane = makeElem('div', 'popup-tab-pane', {}, [
                 this.toneSlider, this.toneLabel,
             ]);
@@ -117,6 +115,11 @@
             this.rgbPane = makeElem('div', 'popup-tab-pane', {}, [this.rgbInput]);
 
             return [this.tabs, this.tonePane, this.rgbPane];
+        }
+
+        updateToneLabel() {
+            this.toneLabel.textContent = this.toneSlider.value + '%';
+            this.toneLabel.style.color = toneColor(parseInt(this.toneSlider.value)();
         }
 
         showTab(useRGB) {
