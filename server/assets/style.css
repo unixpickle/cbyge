@@ -203,6 +203,22 @@ button:focus {
     text-align: center;
 }
 
+.popup-slider-label-internal {
+    line-height: 25px;
+    vertical-align: middle;
+}
+
+.popup-slider-label-swatch {
+    display: inline-block;
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;
+    margin: 0px 10px;
+    border-radius: 10px;
+    box-sizing: border-box;
+    border: 1px solid black;
+}
+
 .popup-tab-pane {
     display: none;
 }
