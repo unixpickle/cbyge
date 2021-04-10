@@ -202,12 +202,13 @@ func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 	f func(c *cbyge.Controller, d *cbyge.ControllerDevice) error) {
 	if r.FormValue("async") == "1" {
+		ids := strings.Split(r.FormValue("id"), ",")
 		go func() {
 			ctrl, err := s.getController()
 			if err != nil {
 				return
 			}
-			for _, id := range strings.Split(r.FormValue("id"), ",") {
+			for _, id := range ids {
 				// Ignore errors; apply the change to as many
 				// devices as possible in async mode.
 				dev, err := s.getDevice(id)
