@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"io"
 	"net"
+	"time"
 
 	"github.com/pkg/errors"
 )
 
 const DefaultPacketConnHost = "cm-ge.xlink.cn:23778"
+const PacketConnTimeout = time.Second * 10
 
 type PacketConn struct {
 	conn net.Conn
@@ -20,7 +22,7 @@ func NewPacketConn() (*PacketConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.DialTCP("tcp", nil, remoteAddr)
+	conn, err := net.DialTimeout("tcp", remoteAddr.String(), PacketConnTimeout)
 	if err != nil {
 		return nil, err
 	}
