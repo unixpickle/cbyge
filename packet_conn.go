@@ -76,7 +76,14 @@ func (p *PacketConn) Close() error {
 // Auth does an authentication exchange with the server.
 //
 // Provide an authorization code, as obtained by Login().
-func (p *PacketConn) Auth(code string) error {
+// If timeout is non-zero, it is a socket read/write
+// timeout; otherwise, no timeout is used.
+func (p *PacketConn) Auth(code string, timeout time.Duration) error {
+	if timeout != 0 {
+		p.conn.SetDeadline(time.Now().Add(timeout))
+		defer p.conn.SetDeadline(time.Time{})
+	}
+
 	data := bytes.NewBuffer(nil)
 	data.Write([]byte{0x03, 0x24, 0x8c, 0x57, 0x7d, 0, 0x10})
 	data.Write([]byte(code))
