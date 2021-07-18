@@ -25,13 +25,14 @@ func main() {
 	flag.StringVar(&addr, "addr", ":8080", "address to listen on")
 	flag.StringVar(&s.Email, "email", "", "C by GE account email")
 	flag.StringVar(&s.Password, "password", "", "C by GE account password")
+	flag.StringVar(&s.SessionInfo, "sessinfo", "", "Cync session info from 2FA login")
 	flag.StringVar(&s.WebPassword, "web-password", "",
 		"password for basic auth, if different than the account password")
 	flag.BoolVar(&s.NoAuth, "no-auth", false, "do not require any password")
 	flag.Parse()
 
-	if s.Email == "" || s.Password == "" {
-		essentials.Die("Must provide -email and -password flags. See -help.")
+	if s.SessionInfo == "" && (s.Email == "" || s.Password == "") {
+		essentials.Die("Must provide -email and -password flags, or the -sessinfo flag. See -help.")
 	}
 
 	if s.WebPassword == "" {
@@ -51,6 +52,8 @@ func main() {
 type Server struct {
 	Email       string
 	Password    string
+	SessionInfo string
+
 	WebPassword string
 	NoAuth      bool
 
@@ -311,6 +314,16 @@ func (s *Server) refreshDevices() ([]*cbyge.ControllerDevice, error) {
 func (s *Server) getController() (*cbyge.Controller, error) {
 	s.controllerLock.Lock()
 	defer s.controllerLock.Unlock()
+
+	if s.SessionInfo != "" {
+		if s.controller != nil {
+			return s.controller, nil
+		}
+		var info *cbyge.SessionInfo
+		essentials.Must(json.Unmarshal([]byte(s.SessionInfo), &info))
+		s.controller = cbyge.NewController(info, 0)
+		return s.controller, nil
+	}
 
 	if s.controller != nil && time.Now().Before(s.controllerExpire) {
 		return s.controller, nil
