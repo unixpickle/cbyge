@@ -34,7 +34,7 @@ func ProxyRequest(w http.ResponseWriter, r *http.Request) {
 		data, _ = ioutil.ReadAll(r.Body)
 	}
 
-	log.Printf("%s: %s", r.URL.String(), string(data))
+	log.Printf("%s <- %s", r.URL.String(), string(data))
 
 	tu := *r.URL
 	tu.Host = TargetURL.Host
@@ -48,6 +48,7 @@ func ProxyRequest(w http.ResponseWriter, r *http.Request) {
 	proxyReq.Header.Set("cookie", r.Header.Get("cookie"))
 	resp, err := (&http.Client{}).Do(proxyReq)
 	data, _ = ioutil.ReadAll(resp.Body)
+	log.Printf("%s (%s) -> %s", r.URL.String(), resp.Status, string(data))
 	w.Header().Set("set-cookie", resp.Header.Get("cookie"))
 	w.Header().Set("content-type", resp.Header.Get("content-type"))
 	w.WriteHeader(resp.StatusCode)
