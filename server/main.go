@@ -104,7 +104,7 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sort.Slice(devs, func(i, j int) bool {
-		return strings.Compare(devs[i].Name(), devs[j].Name()) < 0
+		return strings.Compare(devs[i].DeviceID(), devs[j].DeviceID()) < 0
 	})
 	statuses := make([]cbyge.ControllerDeviceStatus, len(devs))
 	for i, d := range devs {
