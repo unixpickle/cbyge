@@ -95,7 +95,7 @@ type DeviceInfo struct {
 
 type DeviceProperties struct {
 	Bulbs []struct {
-		DeviceID    string `json:"deviceID"`
+		DeviceID    int    `json:"deviceID"`
 		DisplayName string `json:"displayName"`
 		SwitchID    uint32 `json:"switchID"`
 	} `json:"bulbsArray"`

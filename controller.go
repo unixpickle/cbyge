@@ -2,6 +2,7 @@ package cbyge
 
 import (
 	"encoding/binary"
+	"strconv"
 	"sync"
 	"time"
 
@@ -120,7 +121,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 		}
 		for _, bulb := range props.Bulbs {
 			cd := &ControllerDevice{
-				deviceID: bulb.DeviceID,
+				deviceID: strconv.Itoa(bulb.DeviceID),
 				switchID: bulb.SwitchID,
 				name:     bulb.DisplayName,
 			}
