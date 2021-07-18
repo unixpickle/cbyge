@@ -45,6 +45,7 @@ func ProxyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	proxyReq.Header.Set("content-type", r.Header.Get("content-type"))
+	proxyReq.Header.Set("access-token", r.Header.Get("access-token"))
 	proxyReq.Header.Set("cookie", r.Header.Get("cookie"))
 	resp, err := (&http.Client{}).Do(proxyReq)
 	data, _ = ioutil.ReadAll(resp.Body)
