@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -16,6 +17,8 @@ const DefaultCorpID = "1007d2ad150c4000"
 
 const (
 	authURL           = "https://api.gelighting.com/v2/user_auth"
+	verifyCodeURL     = "https://api.gelighting.com/v2/two_factor/email/verifycode"
+	twoFactorURL      = "https://api.gelighting.com/v2/user_auth/two_factor"
 	userInfoURL       = "https://api.gelighting.com/v2/user/%d"
 	devicesURL        = "https://api.gelighting.com/v2/user/%d/subscribe/devices"
 	devicePropertyURL = "https://api.gelighting.com/v2/product/%s/device/%d/property"
@@ -99,6 +102,7 @@ type DeviceProperties struct {
 }
 
 // Login authenticates with the server to create a new session.
+// This only works for older accounts, not newer "Cync" accounts.
 //
 // The resulting error can be checked with IsCredentialsError() to see if it
 // resulted from a bad login.
@@ -109,8 +113,48 @@ func Login(email, password, corpID string) (*SessionInfo, error) {
 		corpID = DefaultCorpID
 	}
 	jsonObj := map[string]string{"email": email, "password": password, "corp_id": corpID}
+	return doLoginRequest(authURL, jsonObj)
+}
+
+// Login2FA authenticates using two-factor authentication, which is required
+// for newer "Cync" accounts.
+//
+// This method returns a callback which should be called with the emailed
+// verification code.
+func Login2FA(email, password, corpID string) (func(code string) (*SessionInfo, error), error) {
+	if corpID == "" {
+		corpID = DefaultCorpID
+	}
+	jsonObj := map[string]string{
+		"email":      email,
+		"local_lang": "en-us",
+		"corp_id":    corpID,
+	}
 	data, _ := json.Marshal(jsonObj)
-	resp, err := http.Post(authURL, "application/json", bytes.NewReader(data))
+	resp, err := http.Post(verifyCodeURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return nil, errors.Wrap(err, "login")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("login: got return code %d", resp.StatusCode)
+	}
+
+	return func(code string) (*SessionInfo, error) {
+		jsonObj := map[string]string{
+			"email":      email,
+			"password":   password,
+			"two_factor": code,
+			"corp_id":    corpID,
+			"resource":   randomLoginResource(),
+		}
+		return doLoginRequest(twoFactorURL, jsonObj)
+	}, nil
+}
+
+func doLoginRequest(url string, obj interface{}) (*SessionInfo, error) {
+	data, _ := json.Marshal(obj)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return nil, errors.Wrap(err, "login")
 	}
@@ -127,6 +171,14 @@ func Login(email, password, corpID string) (*SessionInfo, error) {
 		return nil, errors.Wrap(err, "login")
 	}
 	return &response, nil
+}
+
+func randomLoginResource() string {
+	res := ""
+	for i := 0; i < 16; i++ {
+		res += string('a' + rune(rand.Intn(26)))
+	}
+	return res
 }
 
 // GetUserInfo gets UserInfo using information from Login.
