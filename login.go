@@ -15,10 +15,10 @@ import (
 const DefaultCorpID = "1007d2ad150c4000"
 
 const (
-	authURL           = "https://api-ge.xlink.cn/v2/user_auth"
-	userInfoURL       = "https://api2.xlink.cn/v2/user/%d"
-	devicesURL        = "https://api2.xlink.cn/v2/user/%d/subscribe/devices"
-	devicePropertyURL = "https://api2.xlink.cn/v2/product/%s/device/%d/property"
+	authURL           = "https://api.gelighting.com/v2/user_auth"
+	userInfoURL       = "https://api.gelighting.com/v2/user/%d"
+	devicesURL        = "https://api.gelighting.com/v2/user/%d/subscribe/devices"
+	devicePropertyURL = "https://api.gelighting.com/v2/product/%s/device/%d/property"
 )
 
 type OptionalDate struct {

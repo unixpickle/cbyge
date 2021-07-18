@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const DefaultPacketConnHost = "cm-ge.xlink.cn:23778"
+const DefaultPacketConnHost = "cm.gelighting.com:23778"
 const PacketConnTimeout = time.Second * 10
 
 type PacketConn struct {
