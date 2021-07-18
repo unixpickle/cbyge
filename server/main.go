@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -102,6 +103,9 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sort.Slice(devs, func(i, j int) bool {
+		return strings.Compare(devs[i].Name(), devs[j].Name()) < 0
+	})
 	statuses := make([]cbyge.ControllerDeviceStatus, len(devs))
 	for i, d := range devs {
 		statuses[i] = d.LastStatus()
