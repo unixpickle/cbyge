@@ -22,6 +22,8 @@ func main() {
 	cb, err := cbyge.Login2FA(email, password, "")
 	essentials.Must(err)
 
+	fmt.Print("Enter verification code: ")
+
 	r := bufio.NewReader(os.Stdin)
 	code, err := r.ReadString('\n')
 	essentials.Must(err)
