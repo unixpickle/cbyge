@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -244,6 +245,7 @@ func makeAPICall(urlStr, accessToken string, response interface{}, ctx string) e
 		// wrap it so the error type is always *RemoteError.
 		return err
 	}
+	log.Printf("unmarshaling result for %s: %#v", urlStr, string(data))
 	if err := json.Unmarshal(data, response); err != nil {
 		return errors.Wrap(err, ctx)
 	}
