@@ -335,14 +335,24 @@ func (c *Controller) SetDeviceCT(d *ControllerDevice, ct int) error {
 func (c *Controller) addSwitchMapping(dev *ControllerDevice, switchID uint32) {
 	c.switchMappingLock.Lock()
 	defer c.switchMappingLock.Unlock()
+
+	// If this is the device's switch, then we should set
+	// the device to use this switch since it's known to be
+	// accessible.
+	updateIndex := dev.hasSwitch() && switchID == uint32(dev.switchID)
+
 	for i, x := range c.switches[dev.deviceID] {
 		if x == switchID {
-			c.switchIndices[dev.deviceID] = i
+			if updateIndex {
+				c.switchIndices[dev.deviceID] = i
+			}
 			return
 		}
 	}
 	c.switches[dev.deviceID] = append(c.switches[dev.deviceID], switchID)
-	c.switchIndices[dev.deviceID] = len(c.switches[dev.deviceID]) - 1
+	if updateIndex {
+		c.switchIndices[dev.deviceID] = len(c.switches[dev.deviceID]) - 1
+	}
 }
 
 func (c *Controller) currentSwitch(dev *ControllerDevice) (uint32, error) {
