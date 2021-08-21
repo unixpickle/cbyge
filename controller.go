@@ -21,7 +21,7 @@ type ControllerDeviceStatus struct {
 
 type ControllerDevice struct {
 	deviceID string
-	switchID uint32
+	switchID uint64
 	name     string
 
 	lastStatus     ControllerDeviceStatus
@@ -48,14 +48,27 @@ func (c *ControllerDevice) LastStatus() ControllerDeviceStatus {
 	return c.lastStatus
 }
 
+func (c *ControllerDevice) hasSwitch() bool {
+	return c.switchID&0xffffffff == c.switchID
+}
+
+func (c *ControllerDevice) deviceIndex() int {
+	parsed, _ := strconv.ParseUint(c.deviceID, 10, 64)
+	return int(parsed % 1000)
+}
+
 // A Controller is a high-level API for manipulating C by GE devices.
 type Controller struct {
 	sessionInfoLock sync.RWMutex
 	sessionInfo     *SessionInfo
 	timeout         time.Duration
 
-	deviceIndicesLock sync.RWMutex
-	deviceIndices     map[string]int
+	// Each device has a list of switches which can reach it, and
+	// a current index into this list which is incremented round-robin
+	// every time reaching the device results in an error.
+	switchMappingLock sync.RWMutex
+	switches          map[string][]uint32
+	switchIndices     map[string]int
 
 	// Prevent multiple PacketConns at once, since the server boots
 	// off one connection when anoher is made.
@@ -74,7 +87,8 @@ func NewController(s *SessionInfo, timeout time.Duration) *Controller {
 		sessionInfo: s,
 		timeout:     timeout,
 
-		deviceIndices: map[string]int{},
+		switches:      map[string][]uint32{},
+		switchIndices: map[string]int{},
 	}
 }
 
@@ -139,10 +153,14 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 // If no error occurs, the status is updated in d.LastStatus() in addition to
 // being returned.
 func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, error) {
+	switchID, err := c.currentSwitch(d)
+	if err != nil {
+		return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
+	}
 	var responsePacket []StatusPaginatedResponse
 	var decodeErr error
-	packet := NewPacketGetStatusPaginated(d.switchID, 0)
-	err := c.callAndWait([]*Packet{packet}, true, func(p *Packet) bool {
+	packet := NewPacketGetStatusPaginated(switchID, 0)
+	err = c.callAndWait([]*Packet{packet}, true, func(p *Packet) bool {
 		if IsStatusPaginatedResponse(p) {
 			responsePacket, decodeErr = DecodeStatusPaginatedResponse(p)
 			return true
@@ -155,21 +173,24 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 		err = errors.New("lookup device status: no devices in response")
 	}
 	if err != nil {
+		c.switchFailed(d)
 		return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
 	}
 
-	c.deviceIndicesLock.Lock()
-	c.deviceIndices[d.deviceID] = responsePacket[0].Device
-	c.deviceIndicesLock.Unlock()
-
-	status := ControllerDeviceStatus{
-		StatusPaginatedResponse: responsePacket[0],
-		IsOnline:                true,
+	for _, resp := range responsePacket {
+		if resp.Device == d.deviceIndex() {
+			status := ControllerDeviceStatus{
+				StatusPaginatedResponse: resp,
+				IsOnline:                true,
+			}
+			d.lastStatusLock.Lock()
+			d.lastStatus = status
+			d.lastStatusLock.Unlock()
+			return status, nil
+		}
 	}
-	d.lastStatusLock.Lock()
-	d.lastStatus = status
-	d.lastStatusLock.Unlock()
-	return status, nil
+	c.switchFailed(d)
+	return ControllerDeviceStatus{}, errors.New("lookup device status: failed to reach device")
 }
 
 // DeviceStatuses gets the status for previously enumerated devices.
@@ -180,46 +201,55 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 // Each device's status is updated in d.LastStatus() if no error occurred for
 // that device.
 func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDeviceStatus, []error) {
-	deviceStatuses := make([]ControllerDeviceStatus, len(devs))
-	deviceErrors := make([]error, len(devs))
-	hasResponses := make([]bool, len(devs))
-
-	packets := make([]*Packet, len(devs))
-	idToIndex := map[uint32]int{}
+	hasResponses := make([]bool, 0, len(devs))
+	packets := make([]*Packet, 0, len(devs))
+	devIndexToDev := map[int]*ControllerDevice{}
+	switchToPacketIndex := map[uint32]int{}
 	for i, d := range devs {
-		idToIndex[d.switchID] = i
-		packets[i] = NewPacketGetStatusPaginated(d.switchID, uint16(i))
+		devIndexToDev[d.deviceIndex()] = d
+		if d.hasSwitch() {
+			switchToPacketIndex[uint32(d.switchID)] = len(packets)
+			packets = append(packets, NewPacketGetStatusPaginated(uint32(d.switchID), uint16(i)))
+			hasResponses = append(hasResponses, false)
+		}
 	}
+	if len(packets) == 0 {
+		errs := make([]error, len(devs))
+		for i := range errs {
+			errs[i] = errors.New("no devices can be reached over the internet")
+		}
+		return nil, errs
+	}
+
+	devToStatus := map[*ControllerDevice]ControllerDeviceStatus{}
 	err := c.callAndWait(packets, false, func(p *Packet) bool {
 		if IsStatusPaginatedResponse(p) {
-			deviceID := binary.BigEndian.Uint32(p.Data[:4])
-			devIdx, ok := idToIndex[deviceID]
+			switchID := binary.BigEndian.Uint32(p.Data[:4])
+			devIdx, ok := switchToPacketIndex[switchID]
 			if !ok || hasResponses[devIdx] {
 				return false
 			}
 			hasResponses[devIdx] = true
-			response, err := DecodeStatusPaginatedResponse(p)
-			if err == nil && len(response) == 0 {
-				err = errors.New("lookup device status: no devices in response")
+			responses, err := DecodeStatusPaginatedResponse(p)
+			if err == nil {
+				for _, resp := range responses {
+					dev, ok := devIndexToDev[resp.Device]
+					if !ok {
+						continue
+					}
+					devToStatus[dev] = ControllerDeviceStatus{
+						IsOnline:                true,
+						StatusPaginatedResponse: resp,
+					}
+					c.addSwitchMapping(dev, switchID)
+				}
 			}
-			status := ControllerDeviceStatus{IsOnline: false}
-			if err != nil {
-				deviceErrors[devIdx] = err
-			} else {
-				status.IsOnline = true
-				status.StatusPaginatedResponse = response[0]
-				c.deviceIndicesLock.Lock()
-				c.deviceIndices[devs[devIdx].DeviceID()] = response[0].Device
-				c.deviceIndicesLock.Unlock()
-			}
-			deviceStatuses[devIdx] = status
 		} else if p.IsResponse && len(p.Data) >= 4 && p.Data[len(p.Data)-1] != 0 {
 			// This is an error response.
-			deviceID := binary.BigEndian.Uint32(p.Data[:4])
-			devIdx, ok := idToIndex[deviceID]
-			if ok && !hasResponses[devIdx] {
-				hasResponses[devIdx] = true
-				deviceErrors[devIdx] = RemoteCallError
+			switchID := binary.BigEndian.Uint32(p.Data[:4])
+			packetIdx, ok := switchToPacketIndex[switchID]
+			if ok && !hasResponses[packetIdx] {
+				hasResponses[packetIdx] = true
 			}
 		}
 		for _, hasResponse := range hasResponses {
@@ -229,27 +259,34 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 		}
 		return true
 	})
-	if err != nil {
-		for i, hasResponse := range hasResponses {
-			if !hasResponse {
-				deviceErrors[i] = err
-			}
-		}
+
+	// Even if there was no timeout, some devices may simply not
+	// be reachable because they aren't connected to any switches.
+	if err == nil {
+		err = errors.New("device is not reachable")
 	}
+
 	// Update statuses for online devices.
-	for i, status := range deviceStatuses {
-		if deviceErrors[i] == nil {
+	deviceStatuses := make([]ControllerDeviceStatus, len(devs))
+	deviceErrors := make([]error, len(devs))
+	for i, dev := range devs {
+		status, ok := devToStatus[dev]
+		if ok {
 			devs[i].lastStatusLock.Lock()
 			devs[i].lastStatus = status
 			devs[i].lastStatusLock.Unlock()
+			deviceStatuses[i] = status
+		} else {
+			deviceErrors[i] = err
 		}
 	}
+
 	return deviceStatuses, deviceErrors
 }
 
 // SetDeviceStatus turns on or off a device.
 func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
-	index, err := c.getDeviceIndex(d)
+	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device status")
 	}
@@ -257,68 +294,105 @@ func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
 	if status {
 		statusInt = 1
 	}
-	packet := NewPacketSetDeviceStatus(d.switchID, 123, index, statusInt)
-	return c.callAndWaitSimple(packet, "set device status")
+	packet := NewPacketSetDeviceStatus(switchID, 123, d.deviceIndex(), statusInt)
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device status"))
 }
 
 // SetDeviceLum changes a device's brightness.
 //
 // Brightness values are in [1, 100].
 func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
-	index, err := c.getDeviceIndex(d)
+	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device luminance")
 	}
-	packet := NewPacketSetLum(d.switchID, 123, index, lum)
-	return c.callAndWaitSimple(packet, "set device luminance")
+	packet := NewPacketSetLum(switchID, 123, d.deviceIndex(), lum)
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device luminance"))
 }
 
 // SetDeviceLum changes a device's RGB.
 func (c *Controller) SetDeviceRGB(d *ControllerDevice, r, g, b uint8) error {
-	index, err := c.getDeviceIndex(d)
+	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device RGB")
 	}
-	packet := NewPacketSetRGB(d.switchID, 123, index, r, g, b)
-	return c.callAndWaitSimple(packet, "set device RGB")
+	packet := NewPacketSetRGB(switchID, 123, d.deviceIndex(), r, g, b)
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device RGB"))
 }
 
 // SetDeviceCT changes a device's color tone.
 //
 // Color tone values are in [0, 100].
 func (c *Controller) SetDeviceCT(d *ControllerDevice, ct int) error {
-	index, err := c.getDeviceIndex(d)
+	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device color tone")
 	}
-	packet := NewPacketSetCT(d.switchID, 123, index, ct)
-	return c.callAndWaitSimple(packet, "set device color tone")
+	packet := NewPacketSetCT(switchID, 123, d.deviceIndex(), ct)
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device color tone"))
 }
 
-func (c *Controller) getDeviceIndex(d *ControllerDevice) (int, error) {
-	c.deviceIndicesLock.Lock()
-	index, ok := c.deviceIndices[d.deviceID]
-	c.deviceIndicesLock.Unlock()
-	if ok {
-		// The device was already online.
-		return index, nil
-	}
+func (c *Controller) addSwitchMapping(dev *ControllerDevice, switchID uint32) {
+	c.switchMappingLock.Lock()
+	defer c.switchMappingLock.Unlock()
 
-	// Getting the device status forces us to lookup the device index.
-	// If it succeeds, then the device has come online.
-	_, err := c.DeviceStatus(d)
+	// If this is the device's switch, then we should set
+	// the device to use this switch since it's known to be
+	// accessible.
+	updateIndex := dev.hasSwitch() && switchID == uint32(dev.switchID)
+
+	for i, x := range c.switches[dev.deviceID] {
+		if x == switchID {
+			if updateIndex {
+				c.switchIndices[dev.deviceID] = i
+			}
+			return
+		}
+	}
+	c.switches[dev.deviceID] = append(c.switches[dev.deviceID], switchID)
+	if updateIndex {
+		c.switchIndices[dev.deviceID] = len(c.switches[dev.deviceID]) - 1
+	}
+}
+
+func (c *Controller) currentSwitch(dev *ControllerDevice) (uint32, error) {
+	c.switchMappingLock.RLock()
+	defer c.switchMappingLock.RUnlock()
+
+	switches := c.switches[dev.deviceID]
+	if len(switches) == 0 {
+		return 0, errors.New("device is not reachable")
+	}
+	return switches[c.switchIndices[dev.deviceID]], nil
+}
+
+func (c *Controller) checkedSwitch(dev *ControllerDevice, err error) error {
 	if err != nil {
-		return 0, err
+		c.switchFailed(dev)
 	}
+	return err
+}
 
-	c.deviceIndicesLock.Lock()
-	defer c.deviceIndicesLock.Unlock()
-	return c.deviceIndices[d.deviceID], nil
+func (c *Controller) switchFailed(dev *ControllerDevice) {
+	c.switchMappingLock.Lock()
+	defer c.switchMappingLock.Unlock()
+	// Round-robin through supported switches.
+	switches := c.switches[dev.deviceID]
+	c.switchIndices[dev.deviceID] = (c.switchIndices[dev.deviceID] + 1) % len(switches)
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
+	gotResponse := false
 	err := c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
-		return p.Type == PacketTypePipe && p.IsResponse
+		if p.Type == PacketTypePipe && p.IsResponse {
+			gotResponse = true
+			return false
+		} else if !gotResponse {
+			return false
+		} else {
+			// This seems to come at the end of a state change.
+			return p.Type == PacketTypeSync
+		}
 	})
 	if err != nil {
 		return errors.Wrap(err, context)
