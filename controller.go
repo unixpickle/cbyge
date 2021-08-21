@@ -52,6 +52,10 @@ func (c *ControllerDevice) hasSwitch() bool {
 	return c.switchID&0xffffffff == c.switchID
 }
 
+func (c *ControllerDevice) isSwitch(id uint32) bool {
+	return c.hasSwitch() && uint32(c.switchID) == id
+}
+
 func (c *ControllerDevice) deviceIndex() int {
 	parsed, _ := strconv.ParseUint(c.deviceID, 10, 64)
 	return int(parsed % 1000)
@@ -153,44 +157,71 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 // If no error occurs, the status is updated in d.LastStatus() in addition to
 // being returned.
 func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, error) {
-	switchID, err := c.currentSwitch(d)
-	if err != nil {
-		return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
+	var packets []*Packet
+	c.switchMappingLock.RLock()
+	for i, switchID := range c.switches[d.deviceID] {
+		packets = append(packets, NewPacketGetStatusPaginated(switchID, uint16(i)))
 	}
-	var responsePacket []StatusPaginatedResponse
-	var decodeErr error
-	packet := NewPacketGetStatusPaginated(switchID, 0)
-	err = c.callAndWait([]*Packet{packet}, true, func(p *Packet) bool {
-		if IsStatusPaginatedResponse(p) {
-			responsePacket, decodeErr = DecodeStatusPaginatedResponse(p)
-			return true
-		}
-		return false
-	})
-	if decodeErr != nil {
-		err = decodeErr
-	} else if err == nil && len(responsePacket) == 0 {
-		err = errors.New("lookup device status: no devices in response")
-	}
-	if err != nil {
-		c.switchFailed(d)
-		return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
+	c.switchMappingLock.RUnlock()
+
+	if len(packets) == 0 {
+		return ControllerDeviceStatus{}, errors.Wrap(UnreachableError, "lookup device status")
 	}
 
-	for _, resp := range responsePacket {
-		if resp.Device == d.deviceIndex() {
-			status := ControllerDeviceStatus{
-				StatusPaginatedResponse: resp,
-				IsOnline:                true,
+	var responsePacket *StatusPaginatedResponse
+	var decodeErr error
+	var numResponses int
+	err := c.callAndWait(packets, false, func(p *Packet) bool {
+		if IsStatusPaginatedResponse(p) {
+			numResponses++
+			responses, err := DecodeStatusPaginatedResponse(p)
+			if err == nil {
+				// Always prioritize a response directly from the actual
+				// device, since it will be the most up-to-date.
+				switchID := binary.BigEndian.Uint32(p.Data[:4])
+				isPrimary := d.isSwitch(switchID)
+
+				for _, resp := range responses {
+					if resp.Device == d.deviceIndex() {
+						if responsePacket == nil || isPrimary {
+							responsePacket = &resp
+							if isPrimary {
+								return true
+							}
+						}
+					}
+				}
+			} else {
+				decodeErr = err
 			}
-			d.lastStatusLock.Lock()
-			d.lastStatus = status
-			d.lastStatusLock.Unlock()
-			return status, nil
+		} else if p.IsResponse && len(p.Data) >= 4 && p.Data[len(p.Data)-1] != 0 {
+			// This is an error response from some switch.
+			numResponses++
+			if decodeErr == nil {
+				decodeErr = RemoteCallError
+			}
 		}
+		return numResponses >= len(packets)
+	})
+
+	if responsePacket != nil {
+		status := ControllerDeviceStatus{
+			StatusPaginatedResponse: *responsePacket,
+			IsOnline:                true,
+		}
+		d.lastStatusLock.Lock()
+		d.lastStatus = status
+		d.lastStatusLock.Unlock()
+		return status, nil
+	}
+
+	if decodeErr != nil {
+		err = decodeErr
+	} else if err == nil {
+		err = UnreachableError
 	}
 	c.switchFailed(d)
-	return ControllerDeviceStatus{}, errors.New("lookup device status: failed to reach device")
+	return ControllerDeviceStatus{}, errors.Wrap(err, "lookup device status")
 }
 
 // DeviceStatuses gets the status for previously enumerated devices.
@@ -216,7 +247,7 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 	if len(packets) == 0 {
 		errs := make([]error, len(devs))
 		for i := range errs {
-			errs[i] = errors.New("no devices can be reached over the internet")
+			errs[i] = UnreachableError
 		}
 		return nil, errs
 	}
@@ -263,7 +294,7 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 	// Even if there was no timeout, some devices may simply not
 	// be reachable because they aren't connected to any switches.
 	if err == nil {
-		err = errors.New("device is not reachable")
+		err = UnreachableError
 	}
 
 	// Update statuses for online devices.
@@ -339,7 +370,7 @@ func (c *Controller) addSwitchMapping(dev *ControllerDevice, switchID uint32) {
 	// If this is the device's switch, then we should set
 	// the device to use this switch since it's known to be
 	// accessible.
-	updateIndex := dev.hasSwitch() && switchID == uint32(dev.switchID)
+	updateIndex := dev.isSwitch(switchID)
 
 	for i, x := range c.switches[dev.deviceID] {
 		if x == switchID {
@@ -361,7 +392,7 @@ func (c *Controller) currentSwitch(dev *ControllerDevice) (uint32, error) {
 
 	switches := c.switches[dev.deviceID]
 	if len(switches) == 0 {
-		return 0, errors.New("device is not reachable")
+		return 0, UnreachableError
 	}
 	return switches[c.switchIndices[dev.deviceID]], nil
 }

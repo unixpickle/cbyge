@@ -17,6 +17,10 @@ const (
 // unspecified error.
 var RemoteCallError = errors.New("the server returned with an error")
 
+// An UnreachableError is triggered when a device cannot be reached
+// through any wifi-connected switch.
+var UnreachableError = errors.New("the device cannot be reached")
+
 // A RemoteError is an error message returned by the HTTPS API server.
 type RemoteError struct {
 	Msg     string `json:"msg"`
