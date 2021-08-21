@@ -209,13 +209,14 @@ func GetDeviceProperties(accessToken, productID string, deviceID uint32) (*Devic
 	urlStr := fmt.Sprintf(devicePropertyURL, productID, deviceID)
 	var response DeviceProperties
 	if err := makeAPICall(urlStr, accessToken, &response, "get device properties"); err != nil {
-		// Ignore JSON syntax errors; for some reason this seems
-		// to be an issue for some devices.
-		var causedError *json.SyntaxError
-		if errors.As(err, &causedError) {
+		// Ignore JSON errors, since JSON parsing fails for some
+		// devices: https://github.com/unixpickle/cbyge/issues/4.
+		var err1 *json.SyntaxError
+		var err2 *json.UnmarshalTypeError
+		if errors.As(err, &err1) || errors.As(err, &err2) {
 			return nil, &RemoteError{
 				Code:    RemoteErrorCodePropertyNotExists,
-				Msg:     "failed to parse JSON from response",
+				Msg:     "failed to parse JSON from response: " + err.Error(),
 				Context: "get device properties",
 			}
 		}
