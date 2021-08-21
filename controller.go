@@ -443,7 +443,8 @@ func (c *Controller) callAndWait(p []*Packet, checkError bool, f func(*Packet) b
 	}
 	defer conn.Close()
 
-	if err := conn.Auth(c.getSessionInfo().Authorize, c.timeout); err != nil {
+	sessInfo := c.getSessionInfo()
+	if err := conn.Auth(sessInfo.UserID, sessInfo.Authorize, c.timeout); err != nil {
 		return err
 	}
 
