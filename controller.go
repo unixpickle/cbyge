@@ -382,8 +382,17 @@ func (c *Controller) switchFailed(dev *ControllerDevice) {
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
+	gotResponse := false
 	err := c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
-		return p.Type == PacketTypePipe && p.IsResponse
+		if p.Type == PacketTypePipe && p.IsResponse {
+			gotResponse = true
+			return false
+		} else if !gotResponse {
+			return false
+		} else {
+			// This seems to come at the end of a state change.
+			return p.Type == PacketTypeSync
+		}
 	})
 	if err != nil {
 		return errors.Wrap(err, context)

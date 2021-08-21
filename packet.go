@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	PacketTypeAuth uint8 = 1
-	PacketTypePipe       = 7
+	PacketTypeAuth     uint8 = 1
+	PacketTypeSync           = 4
+	PacketTypePipe           = 7
+	PacketTypePipeSync       = 8
 )
 
 const (
