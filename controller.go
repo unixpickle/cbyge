@@ -275,8 +275,8 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 			devs[i].lastStatusLock.Lock()
 			devs[i].lastStatus = status
 			devs[i].lastStatusLock.Unlock()
-		}
-		if !ok {
+			deviceStatuses[i] = status
+		} else {
 			deviceErrors[i] = err
 		}
 	}
