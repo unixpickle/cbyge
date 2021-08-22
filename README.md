@@ -6,15 +6,33 @@ The final products of this project are:
   1. A web API and front-end website for controlling lightbulbs.
   2. A high-level Go API for enumerating lightbulbs, getting their status, and changing their properties (e.g. brightness and color tone).
 
+**Disclaimer:** this code is the result of reverse engineering and has not been informed by a protocol specification. As a result, there is no guarantee that it will continue to work or that it will work for every network or smart device. While others have successfully used this API in some cases, it is possible that the code makes incorrect assumptions that do not hold up under every use case.
+
 # Website
 
 The [server](server) directory is a self-contained web-app and JSON API endpoint for C by GE lightbulbs. The website looks like this:
 
 <img src="server/screenshot/lights.png" alt="Screenshot of the website" width="400">
 
+Currently, the website does not directly handle two-factor authentication, and you must create a session before launching the server. To do this, run the [login_2fa](login_2fa) command with the `-email` and `-password` flags set to your account's information. The command will prompt you for the 2FA verification code (which should be found in your email). Once you enter this code, the command will spit out session info as a JSON blob. You can then pass this JSON to the `-sessinfo` argument of the server, e.g. as `-sessinfo 'JSON HERE'`. Note that part of the session expires after a week, but a running server instance will continue to work after this time since the expirable part of the session is only used once to enumerate devices.
+
 # Go API
 
-To create a session, simply do:
+Newer accounts require the use of two-factor authentication. You can perform a 2FA handshake to create a session like so:
+
+
+```go
+callback, err := cbyge.Login2FA("my_email", "my_password", "")
+// Handle error...
+
+sessionInfo, err := callback("2FA code from email")
+// Handle error...
+
+session, err := cbyge.NewController(sessionInfo, 0)
+// Handle error...
+```
+
+For older accounts that have never used 2FA before, you may be able to login directly:
 
 ```go
 session, err := cbyge.NewControllerLogin("my_email", "my_password")

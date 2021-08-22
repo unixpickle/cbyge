@@ -1,3 +1,6 @@
+// Command login_2fa performs two-factor authentication for
+// a C by GE (Cync) account, returning a session as JSON
+// if the login succeeds.
 package main
 
 import (
@@ -16,8 +19,12 @@ func main() {
 	var email string
 	var password string
 	flag.StringVar(&email, "email", "", "user email")
-	flag.StringVar(&password, "pass", "", "user password")
+	flag.StringVar(&password, "password", "", "user password")
 	flag.Parse()
+
+	if email == "" || password == "" {
+		essentials.Die("Must provide -email and -password flags. See -help.")
+	}
 
 	cb, err := cbyge.Login2FA(email, password, "")
 	essentials.Must(err)
