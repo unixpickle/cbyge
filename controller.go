@@ -130,6 +130,12 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 	}
 	var results []*ControllerDevice
 	for _, dev := range devicesResponse {
+		if !dev.IsOnline {
+			// Some devices have no bulbs array, and can cause
+			// issues when fetching device properties.
+			// https://github.com/unixpickle/cbyge/issues/4
+			continue
+		}
 		props, err := GetDeviceProperties(sessInfo.AccessToken, dev.ProductID, dev.ID)
 		if err != nil {
 			if !IsPropertyNotExistsError(err) {
