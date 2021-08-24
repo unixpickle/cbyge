@@ -328,9 +328,9 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 		var info *cbyge.SessionInfo
 		err := json.Unmarshal([]byte(s.SessionInfo), &info)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "The session info JSON, passed via -sessinfo, is invalid. "+
-				"Encountered parse error: "+err.Error())
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "The session info JSON, passed via -sessinfo, is invalid. "+
+				"Encountered parse error: "+err.Error()+". The offending data is: %#v\n", s.SessionInfo)
+			return nil, errors.New("invalid -sessinfo argument")
 		}
 		s.controller = cbyge.NewController(info, 0)
 		return s.controller, nil
