@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -324,7 +326,12 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 			return s.controller, nil
 		}
 		var info *cbyge.SessionInfo
-		essentials.Must(json.Unmarshal([]byte(s.SessionInfo), &info))
+		err := json.Unmarshal([]byte(s.SessionInfo), &info)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "The session info JSON, passed via -sessinfo, is invalid. "+
+				"Encountered parse error: "+err.Error())
+			os.Exit(1)
+		}
 		s.controller = cbyge.NewController(info, 0)
 		return s.controller, nil
 	}
