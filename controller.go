@@ -165,6 +165,10 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, error) {
 	var packets []*Packet
 	c.switchMappingLock.RLock()
+	var curSwitch uint32
+	if len(c.switches[d.deviceID]) > 0 {
+		curSwitch = c.switches[d.deviceID][c.switchIndices[d.deviceID]]
+	}
 	for i, switchID := range c.switches[d.deviceID] {
 		packets = append(packets, NewPacketGetStatusPaginated(switchID, uint16(i)))
 	}
@@ -189,7 +193,11 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 
 				for _, resp := range responses {
 					if resp.Device == d.deviceIndex() {
-						if responsePacket == nil || isPrimary {
+						// Prioritize statuses from the device's switch and
+						// the switch that we control this device through,
+						// since both switches are likely to have the most
+						// up-to-date information.
+						if responsePacket == nil || switchID == curSwitch || isPrimary {
 							responsePacket = &resp
 							if isPrimary {
 								return true
@@ -323,6 +331,16 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 
 // SetDeviceStatus turns on or off a device.
 func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
+	return c.setDeviceStatus(d, status, false)
+}
+
+// SetDeviceStatusAsync is like SetDeviceStatus, but does not wait for the
+// device's state to change.
+func (c *Controller) SetDeviceStatusAsync(d *ControllerDevice, status bool) error {
+	return c.setDeviceStatus(d, status, true)
+}
+
+func (c *Controller) setDeviceStatus(d *ControllerDevice, status, async bool) error {
 	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device status")
@@ -332,41 +350,71 @@ func (c *Controller) SetDeviceStatus(d *ControllerDevice, status bool) error {
 		statusInt = 1
 	}
 	packet := NewPacketSetDeviceStatus(switchID, 123, d.deviceIndex(), statusInt)
-	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device status"))
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device status", async))
 }
 
 // SetDeviceLum changes a device's brightness.
 //
 // Brightness values are in [1, 100].
 func (c *Controller) SetDeviceLum(d *ControllerDevice, lum int) error {
+	return c.setDeviceLum(d, lum, false)
+}
+
+// SetDeviceLumAsync is like SetDeviceLum, but does not wait for the device's
+// status to change.
+func (c *Controller) SetDeviceLumAsync(d *ControllerDevice, lum int) error {
+	return c.setDeviceLum(d, lum, true)
+}
+
+func (c *Controller) setDeviceLum(d *ControllerDevice, lum int, async bool) error {
 	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device luminance")
 	}
 	packet := NewPacketSetLum(switchID, 123, d.deviceIndex(), lum)
-	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device luminance"))
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device luminance", async))
 }
 
-// SetDeviceLum changes a device's RGB.
+// SetDeviceRGB changes a device's RGB.
 func (c *Controller) SetDeviceRGB(d *ControllerDevice, r, g, b uint8) error {
+	return c.setDeviceRGB(d, r, g, b, false)
+}
+
+// SetDeviceRGBAsync is like SetDeviceRGB, but does not wait for the device's
+// status to change.
+func (c *Controller) SetDeviceRGBAsync(d *ControllerDevice, r, g, b uint8) error {
+	return c.setDeviceRGB(d, r, g, b, true)
+}
+
+func (c *Controller) setDeviceRGB(d *ControllerDevice, r, g, b uint8, async bool) error {
 	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device RGB")
 	}
 	packet := NewPacketSetRGB(switchID, 123, d.deviceIndex(), r, g, b)
-	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device RGB"))
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device RGB", async))
 }
 
 // SetDeviceCT changes a device's color tone.
 //
 // Color tone values are in [0, 100].
 func (c *Controller) SetDeviceCT(d *ControllerDevice, ct int) error {
+	return c.setDeviceCT(d, ct, false)
+}
+
+// SetDeviceCTAsync is like SetDeviceCT, but does not wait for the device's
+// status to change.
+func (c *Controller) SetDeviceCTAsync(d *ControllerDevice, ct int) error {
+	return c.setDeviceCT(d, ct, true)
+}
+
+func (c *Controller) setDeviceCT(d *ControllerDevice, ct int, async bool) error {
 	switchID, err := c.currentSwitch(d)
 	if err != nil {
 		return errors.Wrap(err, "set device color tone")
 	}
 	packet := NewPacketSetCT(switchID, 123, d.deviceIndex(), ct)
-	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device color tone"))
+	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device color tone", async))
 }
 
 func (c *Controller) addSwitchMapping(dev *ControllerDevice, switchID uint32) {
@@ -418,18 +466,34 @@ func (c *Controller) switchFailed(dev *ControllerDevice) {
 	c.switchIndices[dev.deviceID] = (c.switchIndices[dev.deviceID] + 1) % len(switches)
 }
 
-func (c *Controller) callAndWaitSimple(p *Packet, context string) error {
+func (c *Controller) callAndWaitSimple(p *Packet, context string, async bool) error {
+	// Currently, I have not found a fool-proof way to wait
+	// until a status update has completed, aside from polling
+	// the device status until the change is visible there.
+	//
+	// If we use a device's own switch to update the device, then
+	// waiting for a response packet seems to be sufficient.
+	// Otherwise, the switch may return a response packet before
+	// the device's new status is in effect.
+	//
+	// One thing which seems to work reasonably well is waiting
+	// for both a response packet and a sync packet. This doesn't
+	// always work, though. Sometimes we can receive an old sync
+	// packet from a previous request (for example, if we are
+	// changing many lights in a row). Other times, we apparently
+	// never receive a sync packet and the call times out.
 	gotResponse := false
+	gotSync := false
 	err := c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
 		if p.Type == PacketTypePipe && p.IsResponse {
 			gotResponse = true
-			return false
-		} else if !gotResponse {
-			return false
-		} else {
-			// This seems to come at the end of a state change.
-			return p.Type == PacketTypeSync
+		} else if p.Type == PacketTypeSync {
+			gotSync = true
 		}
+		if async && gotResponse {
+			return true
+		}
+		return gotResponse && gotSync
 	})
 	if err != nil {
 		return errors.Wrap(err, context)

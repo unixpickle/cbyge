@@ -157,7 +157,10 @@ func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDeviceSetOn(w http.ResponseWriter, r *http.Request) {
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
+	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+		if async {
+			return c.SetDeviceStatusAsync(d, r.FormValue("on") == "1")
+		}
 		return c.SetDeviceStatus(d, r.FormValue("on") == "1")
 	})
 }
@@ -171,7 +174,10 @@ func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request
 		s.serveError(w, http.StatusBadRequest, "tone out of range [0, 100]")
 		return
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
+	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+		if async {
+			return c.SetDeviceCTAsync(d, tone)
+		}
 		return c.SetDeviceCT(d, tone)
 	})
 }
@@ -189,7 +195,10 @@ func (s *Server) HandleDeviceSetRGB(w http.ResponseWriter, r *http.Request) {
 		}
 		values = append(values, uint8(value))
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
+	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+		if async {
+			return c.SetDeviceRGBAsync(d, values[0], values[1], values[2])
+		}
 		return c.SetDeviceRGB(d, values[0], values[1], values[2])
 	})
 }
@@ -203,13 +212,16 @@ func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Reques
 		s.serveError(w, http.StatusBadRequest, "brightness out of range [1, 100]")
 		return
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice) error {
+	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+		if async {
+			return c.SetDeviceLumAsync(d, lum)
+		}
 		return c.SetDeviceLum(d, lum)
 	})
 }
 
 func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
-	f func(c *cbyge.Controller, d *cbyge.ControllerDevice) error) {
+	f func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error) {
 	if r.FormValue("async") == "1" {
 		ids := strings.Split(r.FormValue("id"), ",")
 		go func() {
@@ -222,7 +234,7 @@ func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 				// devices as possible in async mode.
 				dev, err := s.getDevice(id)
 				if err == nil {
-					f(ctrl, dev)
+					f(ctrl, dev, true)
 				}
 			}
 		}()
@@ -242,7 +254,7 @@ func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 			s.serveError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		err = f(ctrl, dev)
+		err = f(ctrl, dev, false)
 		if err != nil {
 			s.serveError(w, http.StatusInternalServerError, err.Error())
 			return
