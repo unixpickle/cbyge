@@ -130,7 +130,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 	}
 	var results []*ControllerDevice
 	for _, dev := range devicesResponse {
-		if !dev.IsOnline {
+		if !dev.IsOnline && !dev.IsActive {
 			// Some devices have no bulbs array, and can cause
 			// issues when fetching device properties.
 			// https://github.com/unixpickle/cbyge/issues/4
