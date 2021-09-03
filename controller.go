@@ -77,6 +77,10 @@ type Controller struct {
 	// Prevent multiple PacketConns at once, since the server boots
 	// off one connection when anoher is made.
 	packetConnLock sync.Mutex
+
+	// We continually increment our sent sequence ID.
+	seqIDLock sync.Mutex
+	seqID     uint16
 }
 
 // NewController creates a Controller using a pre-created session and a
@@ -169,8 +173,8 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 	if len(c.switches[d.deviceID]) > 0 {
 		curSwitch = c.switches[d.deviceID][c.switchIndices[d.deviceID]]
 	}
-	for i, switchID := range c.switches[d.deviceID] {
-		packets = append(packets, NewPacketGetStatusPaginated(switchID, uint16(i)))
+	for _, switchID := range c.switches[d.deviceID] {
+		packets = append(packets, NewPacketGetStatusPaginated(switchID, c.nextSeqID()))
 	}
 	c.switchMappingLock.RUnlock()
 
@@ -250,11 +254,12 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 	packets := make([]*Packet, 0, len(devs))
 	devIndexToDev := map[int]*ControllerDevice{}
 	switchToPacketIndex := map[uint32]int{}
-	for i, d := range devs {
+	for _, d := range devs {
 		devIndexToDev[d.deviceIndex()] = d
 		if d.hasSwitch() {
 			switchToPacketIndex[uint32(d.switchID)] = len(packets)
-			packets = append(packets, NewPacketGetStatusPaginated(uint32(d.switchID), uint16(i)))
+			packet := NewPacketGetStatusPaginated(uint32(d.switchID), c.nextSeqID())
+			packets = append(packets, packet)
 			hasResponses = append(hasResponses, false)
 		}
 	}
@@ -349,7 +354,7 @@ func (c *Controller) setDeviceStatus(d *ControllerDevice, status, async bool) er
 	if status {
 		statusInt = 1
 	}
-	packet := NewPacketSetDeviceStatus(switchID, 123, d.deviceIndex(), statusInt)
+	packet := NewPacketSetDeviceStatus(switchID, c.nextSeqID(), d.deviceIndex(), statusInt)
 	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device status", async))
 }
 
@@ -371,7 +376,7 @@ func (c *Controller) setDeviceLum(d *ControllerDevice, lum int, async bool) erro
 	if err != nil {
 		return errors.Wrap(err, "set device luminance")
 	}
-	packet := NewPacketSetLum(switchID, 123, d.deviceIndex(), lum)
+	packet := NewPacketSetLum(switchID, c.nextSeqID(), d.deviceIndex(), lum)
 	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device luminance", async))
 }
 
@@ -391,7 +396,7 @@ func (c *Controller) setDeviceRGB(d *ControllerDevice, r, g, b uint8, async bool
 	if err != nil {
 		return errors.Wrap(err, "set device RGB")
 	}
-	packet := NewPacketSetRGB(switchID, 123, d.deviceIndex(), r, g, b)
+	packet := NewPacketSetRGB(switchID, c.nextSeqID(), d.deviceIndex(), r, g, b)
 	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device RGB", async))
 }
 
@@ -413,7 +418,7 @@ func (c *Controller) setDeviceCT(d *ControllerDevice, ct int, async bool) error 
 	if err != nil {
 		return errors.Wrap(err, "set device color tone")
 	}
-	packet := NewPacketSetCT(switchID, 123, d.deviceIndex(), ct)
+	packet := NewPacketSetCT(switchID, c.nextSeqID(), d.deviceIndex(), ct)
 	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device color tone", async))
 }
 
@@ -583,4 +588,12 @@ func (c *Controller) getSessionInfo() *SessionInfo {
 	c.sessionInfoLock.RLock()
 	defer c.sessionInfoLock.RUnlock()
 	return c.sessionInfo
+}
+
+func (c *Controller) nextSeqID() uint16 {
+	c.seqIDLock.Lock()
+	defer c.seqIDLock.Unlock()
+	res := c.seqID
+	c.seqID++
+	return res
 }
