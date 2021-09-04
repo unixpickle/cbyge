@@ -213,7 +213,9 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 						// since both switches are likely to have the most
 						// up-to-date information.
 						if responsePacket == nil || switchID == curSwitch || isPrimary {
-							responsePacket = &resp
+							// Doing &resp references the for-loop variable.
+							responsePacket = new(StatusPaginatedResponse)
+							*responsePacket = resp
 							if isPrimary {
 								return true
 							}
