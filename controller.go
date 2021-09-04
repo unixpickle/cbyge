@@ -472,6 +472,10 @@ func (c *Controller) switchFailed(dev *ControllerDevice) {
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string, async bool) error {
+	seq, err := p.Seq()
+	if err != nil {
+		return err
+	}
 	// Currently, I have not found a fool-proof way to wait
 	// until a status update has completed, aside from polling
 	// the device status until the change is visible there.
@@ -489,8 +493,9 @@ func (c *Controller) callAndWaitSimple(p *Packet, context string, async bool) er
 	// never receive a sync packet and the call times out.
 	gotResponse := false
 	gotSync := false
-	err := c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
-		if p.Type == PacketTypePipe && p.IsResponse {
+	err = c.callAndWait([]*Packet{p}, true, func(p *Packet) bool {
+		seq1, err := p.Seq()
+		if err == nil && seq == seq1 && p.IsResponse {
 			gotResponse = true
 		} else if p.Type == PacketTypeSync {
 			gotSync = true
@@ -511,6 +516,13 @@ func (c *Controller) callAndWaitSimple(p *Packet, context string, async bool) er
 func (c *Controller) callAndWait(p []*Packet, checkError bool, f func(*Packet) bool) error {
 	c.packetConnLock.Lock()
 	defer c.packetConnLock.Unlock()
+
+	checkSeqs := map[uint16]bool{}
+	for _, packet := range p {
+		if seq, err := packet.Seq(); err == nil {
+			checkSeqs[seq] = true
+		}
+	}
 
 	conn, err := NewPacketConn()
 	if err != nil {
@@ -539,7 +551,8 @@ func (c *Controller) callAndWait(p []*Packet, checkError bool, f func(*Packet) b
 				return
 			}
 			if checkError && packet.IsResponse {
-				if len(packet.Data) > 0 {
+				seq, err := packet.Seq()
+				if err == nil && checkSeqs[seq] && len(packet.Data) > 0 {
 					if packet.Data[len(packet.Data)-1] != 0 {
 						errChan <- RemoteCallError
 						return

@@ -30,6 +30,14 @@ type Packet struct {
 	Data       []byte
 }
 
+// Seq gets the sequence number of a pipe packet.
+func (p *Packet) Seq() (uint16, error) {
+	if p.Type != PacketTypePipe || len(p.Data) < 6 {
+		return 0, errors.New("packet has no seq number")
+	}
+	return binary.BigEndian.Uint16(p.Data[4:6]), nil
+}
+
 // NewPacketPipe creates a "pipe buffer" packet with a given subtype.
 func NewPacketPipe(deviceID uint32, seq uint16, subtype uint8, data []byte) *Packet {
 	if len(data) > 0xff {
