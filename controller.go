@@ -172,13 +172,16 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 // being returned.
 func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, error) {
 	var packets []*Packet
+	seqIDs := map[uint16]bool{}
 	c.switchMappingLock.RLock()
 	var curSwitch uint32
 	if len(c.switches[d.deviceID]) > 0 {
 		curSwitch = c.switches[d.deviceID][c.switchIndices[d.deviceID]]
 	}
 	for _, switchID := range c.switches[d.deviceID] {
-		packets = append(packets, NewPacketGetStatusPaginated(switchID, c.nextSeqID()))
+		seqID := c.nextSeqID()
+		packets = append(packets, NewPacketGetStatusPaginated(switchID, seqID))
+		seqIDs[seqID] = true
 	}
 	c.switchMappingLock.RUnlock()
 
@@ -190,6 +193,10 @@ func (c *Controller) DeviceStatus(d *ControllerDevice) (ControllerDeviceStatus, 
 	var decodeErr error
 	var numResponses int
 	err := c.callAndWait(packets, false, func(p *Packet) bool {
+		if seq, err := p.Seq(); err == nil && p.IsResponse && !seqIDs[seq] {
+			// This is a response to a packet we did not send.
+			return false
+		}
 		if IsStatusPaginatedResponse(p) {
 			numResponses++
 			responses, err := DecodeStatusPaginatedResponse(p)
@@ -258,13 +265,16 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 	packets := make([]*Packet, 0, len(devs))
 	devIndexToDev := map[int]*ControllerDevice{}
 	switchToPacketIndex := map[uint32]int{}
+	seqIDs := map[uint16]bool{}
 	for _, d := range devs {
 		devIndexToDev[d.deviceIndex()] = d
 		if d.hasSwitch() {
 			switchToPacketIndex[uint32(d.switchID)] = len(packets)
-			packet := NewPacketGetStatusPaginated(uint32(d.switchID), c.nextSeqID())
+			seqID := c.nextSeqID()
+			packet := NewPacketGetStatusPaginated(uint32(d.switchID), seqID)
 			packets = append(packets, packet)
 			hasResponses = append(hasResponses, false)
+			seqIDs[seqID] = true
 		}
 	}
 	if len(packets) == 0 {
@@ -277,6 +287,10 @@ func (c *Controller) DeviceStatuses(devs []*ControllerDevice) ([]ControllerDevic
 
 	devToStatus := map[*ControllerDevice]ControllerDeviceStatus{}
 	err := c.callAndWait(packets, false, func(p *Packet) bool {
+		if seq, err := p.Seq(); err == nil && p.IsResponse && !seqIDs[seq] {
+			// This is a response to a packet we did not send.
+			return false
+		}
 		if IsStatusPaginatedResponse(p) {
 			switchID := binary.BigEndian.Uint32(p.Data[:4])
 			devIdx, ok := switchToPacketIndex[switchID]
