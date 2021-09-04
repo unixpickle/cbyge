@@ -2,6 +2,7 @@ package cbyge
 
 import (
 	"encoding/binary"
+	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -91,12 +92,15 @@ func NewController(s *SessionInfo, timeout time.Duration) *Controller {
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano() + rand.Int63()))
 	return &Controller{
 		sessionInfo: s,
 		timeout:     timeout,
 
 		switches:      map[string][]uint32{},
 		switchIndices: map[string]int{},
+
+		seqID: uint16(rng.Int63()),
 	}
 }
 
