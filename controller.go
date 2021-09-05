@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/unixpickle/essentials"
 )
 
 const DefaultTimeout = time.Second * 10
@@ -378,6 +379,33 @@ func (c *Controller) setDeviceStatus(d *ControllerDevice, status, async bool) er
 	return c.checkedSwitch(d, c.callAndWaitSimple(packet, "set device status", async))
 }
 
+// BlastDeviceStatuses asynchronously turns on or off many devices in bulk.
+// It will use up to numSwitches switches per device, providing redundancy if
+// some switches are not connected.
+// If numSwitches is 0, one switch will be used per device.
+func (c *Controller) BlastDeviceStatuses(ds []*ControllerDevice, statuses []bool,
+	numSwitches int) error {
+	var packets []*Packet
+	for i, d := range ds {
+		switchIDs, err := c.randomSwitches(d, numSwitches)
+		if err != nil {
+			return errors.Wrap(err, "blast device statuses")
+		}
+		statusInt := 0
+		if statuses[i] {
+			statusInt = 1
+		}
+		for _, switchID := range switchIDs {
+			packet := NewPacketSetDeviceStatus(switchID, c.nextSeqID(), d.deviceIndex(), statusInt)
+			packets = append(packets, packet)
+		}
+	}
+	if err := c.blastPackets(packets); err != nil {
+		return errors.Wrap(err, "blast device statuses")
+	}
+	return nil
+}
+
 // SetDeviceLum changes a device's brightness.
 //
 // Brightness values are in [1, 100].
@@ -489,6 +517,24 @@ func (c *Controller) switchFailed(dev *ControllerDevice) {
 	// Round-robin through supported switches.
 	switches := c.switches[dev.deviceID]
 	c.switchIndices[dev.deviceID] = (c.switchIndices[dev.deviceID] + 1) % len(switches)
+}
+
+func (c *Controller) randomSwitches(dev *ControllerDevice, max int) ([]uint32, error) {
+	c.switchMappingLock.RLock()
+	defer c.switchMappingLock.RUnlock()
+	ordered := c.switches[dev.deviceID]
+	if len(ordered) == 0 {
+		return nil, UnreachableError
+	}
+	cur := c.switchIndices[dev.deviceID]
+	res := []uint32{ordered[cur]}
+
+	shuffled := append(append([]uint32{}, ordered[:cur]...), ordered[cur+1:]...)
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	return append(res, shuffled[:essentials.MinInt(len(shuffled), max-1)]...), nil
 }
 
 func (c *Controller) callAndWaitSimple(p *Packet, context string, async bool) error {
@@ -615,6 +661,38 @@ func (c *Controller) callAndWait(p []*Packet, checkError bool, f func(*Packet) b
 			return errors.New("timeout waiting for response")
 		}
 	}
+}
+
+func (c *Controller) blastPackets(p []*Packet) error {
+	c.packetConnLock.Lock()
+	defer c.packetConnLock.Unlock()
+
+	checkSeqs := map[uint16]bool{}
+	for _, packet := range p {
+		if seq, err := packet.Seq(); err == nil {
+			checkSeqs[seq] = true
+		}
+	}
+
+	conn, err := NewPacketConn()
+	if err != nil {
+		return err
+	}
+
+	sessInfo := c.getSessionInfo()
+	if err := conn.Auth(sessInfo.UserID, sessInfo.Authorize, c.timeout); err != nil {
+		conn.Close()
+		return err
+	}
+
+	for _, subPacket := range p {
+		if err := conn.Write(subPacket); err != nil {
+			conn.Close()
+			return err
+		}
+	}
+
+	return conn.Close()
 }
 
 func (c *Controller) getSessionInfo() *SessionInfo {

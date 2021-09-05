@@ -46,6 +46,7 @@ func main() {
 	http.Handle("/api/devices", s.Auth(s.HandleDevices))
 	http.Handle("/api/device/status", s.Auth(s.HandleDeviceStatus))
 	http.Handle("/api/device/set_on", s.Auth(s.HandleDeviceSetOn))
+	http.Handle("/api/device/blast_on", s.Auth(s.HandleDeviceBlastOn))
 	http.Handle("/api/device/set_color_tone", s.Auth(s.HandleDeviceSetColorTone))
 	http.Handle("/api/device/set_rgb", s.Auth(s.HandleDeviceSetRGB))
 	http.Handle("/api/device/set_brightness", s.Auth(s.HandleDeviceSetBrightness))
@@ -163,6 +164,50 @@ func (s *Server) HandleDeviceSetOn(w http.ResponseWriter, r *http.Request) {
 		}
 		return c.SetDeviceStatus(d, r.FormValue("on") == "1")
 	})
+}
+
+func (s *Server) HandleDeviceBlastOn(w http.ResponseWriter, r *http.Request) {
+	ids := strings.Split(r.FormValue("id"), ",")
+	status := r.FormValue("on") == "1"
+	numSwitches := 3
+
+	if r.FormValue("switches") != "" {
+		n, err := strconv.Atoi(r.FormValue("switches"))
+		if err != nil || n < 1 {
+			s.serveError(w, http.StatusBadRequest, "invalid 'switches' argument")
+			return
+		}
+		numSwitches = n
+	}
+
+	runFunc := func() error {
+		ctrl, err := s.getController()
+		if err != nil {
+			return err
+		}
+		var devs []*cbyge.ControllerDevice
+		var statuses []bool
+		for _, id := range ids {
+			dev, err := s.getDevice(id)
+			if err != nil {
+				return err
+			}
+			devs = append(devs, dev)
+			statuses = append(statuses, status)
+		}
+		return ctrl.BlastDeviceStatuses(devs, statuses, numSwitches)
+	}
+	if r.FormValue("async") == "1" {
+		go runFunc()
+		s.serveObject(w, http.StatusOK, map[string]interface{}{})
+	} else {
+		err := runFunc()
+		if err != nil {
+			s.serveError(w, http.StatusInternalServerError, err.Error())
+		} else {
+			s.serveObject(w, http.StatusOK, map[string]interface{}{})
+		}
+	}
 }
 
 func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request) {
