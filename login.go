@@ -59,7 +59,7 @@ type UserInfo struct {
 	PasswordInited  bool         `json:"passwd_inited"`
 	IsValid         bool         `json:"is_valid"`
 	Nickname        string       `json:"nickname"`
-	ID              int          `json:"id"`
+	ID              uint32       `json:"id"`
 	CreateDate      OptionalDate `json:"create_date"`
 	Email           string       `json:"email"`
 	RegionID        int          `json:"region_id"`
