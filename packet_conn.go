@@ -78,7 +78,7 @@ func (p *PacketConn) Close() error {
 // Provide an authorization code, as obtained by Login().
 // If timeout is non-zero, it is a socket read/write
 // timeout; otherwise, no timeout is used.
-func (p *PacketConn) Auth(userId int64, code string, timeout time.Duration) error {
+func (p *PacketConn) Auth(userId uint32, code string, timeout time.Duration) error {
 	if timeout != 0 {
 		p.conn.SetDeadline(time.Now().Add(timeout))
 		defer p.conn.SetDeadline(time.Time{})

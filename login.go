@@ -47,7 +47,7 @@ func (o *OptionalDate) UnmarshalJSON(d []byte) error {
 type SessionInfo struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	UserID       int64  `json:"user_id"`
+	UserID       uint32 `json:"user_id"`
 	ExpireIn     int    `json:"expire_in"`
 	Authorize    string `json:"authorize"`
 }
@@ -95,7 +95,7 @@ type DeviceInfo struct {
 
 type DeviceProperties struct {
 	Bulbs []struct {
-		DeviceID    int    `json:"deviceID"`
+		DeviceID    int64  `json:"deviceID"`
 		DisplayName string `json:"displayName"`
 		SwitchID    uint64 `json:"switchID"`
 	} `json:"bulbsArray"`
@@ -182,7 +182,7 @@ func randomLoginResource() string {
 }
 
 // GetUserInfo gets UserInfo using information from Login.
-func GetUserInfo(userID int64, accessToken string) (*UserInfo, error) {
+func GetUserInfo(userID uint32, accessToken string) (*UserInfo, error) {
 	urlStr := fmt.Sprintf(userInfoURL, userID)
 	var response UserInfo
 	if err := makeAPICall(urlStr, accessToken, &response, "get user info"); err != nil {
@@ -192,7 +192,7 @@ func GetUserInfo(userID int64, accessToken string) (*UserInfo, error) {
 }
 
 // GetDevices gets the devices using information from Login.
-func GetDevices(userID int64, accessToken string) ([]*DeviceInfo, error) {
+func GetDevices(userID uint32, accessToken string) ([]*DeviceInfo, error) {
 	urlStr := fmt.Sprintf(devicesURL, userID)
 	var response []*DeviceInfo
 	if err := makeAPICall(urlStr, accessToken, &response, "get devices"); err != nil {

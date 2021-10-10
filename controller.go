@@ -154,7 +154,7 @@ func (c *Controller) Devices() ([]*ControllerDevice, error) {
 		}
 		for _, bulb := range props.Bulbs {
 			cd := &ControllerDevice{
-				deviceID: strconv.Itoa(bulb.DeviceID),
+				deviceID: strconv.FormatInt(bulb.DeviceID, 10),
 				switchID: bulb.SwitchID,
 				name:     bulb.DisplayName,
 			}
