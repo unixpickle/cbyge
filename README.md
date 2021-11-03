@@ -14,7 +14,7 @@ The [server](server) directory is a self-contained web-app and JSON API endpoint
 
 <img src="server/screenshot/lights.png" alt="Screenshot of the website" width="400">
 
-Currently, the website does not directly handle two-factor authentication, and you must create a session before launching the server. To do this, run the [login_2fa](login_2fa) command with the `-email` and `-password` flags set to your account's information. The command will prompt you for the 2FA verification code (which should be found in your email). Once you enter this code, the command will spit out session info as a JSON blob. You can then pass this JSON to the `-sessinfo` argument of the server, e.g. as `-sessinfo 'JSON HERE'`. Note that part of the session expires after a week, but a running server instance will continue to work after this time since the expirable part of the session is only used once to enumerate devices.
+If you run the website wih a `-email` and `-password` argument, then the website will bring up a two-factor authentication page the first time you load it. You will hit a button and enter the verification code sent to your email. Alternatively, you can login ahead of time by running the [login_2fa](login_2fa) command with the `-email` and `-password` flags set to your account's information. The command will prompt you for the 2FA verification code. Once you enter this code, the command will spit out session info as a JSON blob. You can then pass this JSON to the `-sessinfo` argument of the server, e.g. as `-sessinfo 'JSON HERE'`. Note that part of the session expires after a week, but a running server instance will continue to work after this time since the expirable part of the session is only used once to enumerate devices.
 
 # Go API
 
