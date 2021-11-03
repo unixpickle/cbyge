@@ -122,6 +122,17 @@ func Login(email, password, corpID string) (*SessionInfo, error) {
 // This method returns a callback which should be called with the emailed
 // verification code.
 func Login2FA(email, password, corpID string) (func(code string) (*SessionInfo, error), error) {
+	if err := Login2FAStage1(email, corpID); err != nil {
+		return nil, err
+	}
+	return func(code string) (*SessionInfo, error) {
+		return Login2FAStage2(email, password, corpID, code)
+	}, nil
+}
+
+// Login2FAStage1 sends a two-factor authentication email
+// to the user. Complete the login using Login2FAStage2.
+func Login2FAStage1(email, corpID string) error {
 	if corpID == "" {
 		corpID = DefaultCorpID
 	}
@@ -133,23 +144,30 @@ func Login2FA(email, password, corpID string) (func(code string) (*SessionInfo, 
 	data, _ := json.Marshal(jsonObj)
 	resp, err := http.Post(verifyCodeURL, "application/json", bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.Wrap(err, "login")
+		return errors.Wrap(err, "login")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("login: got return code %d", resp.StatusCode)
+		return fmt.Errorf("login: got return code %d", resp.StatusCode)
 	}
+	return nil
+}
 
-	return func(code string) (*SessionInfo, error) {
-		jsonObj := map[string]string{
-			"email":      email,
-			"password":   password,
-			"two_factor": code,
-			"corp_id":    corpID,
-			"resource":   randomLoginResource(),
-		}
-		return doLoginRequest(twoFactorURL, jsonObj)
-	}, nil
+// Login2FAStage2 completes the two-factor authentication
+// process, creating a session if the code and password is
+// correct.
+func Login2FAStage2(email, password, corpID, code string) (*SessionInfo, error) {
+	if corpID == "" {
+		corpID = DefaultCorpID
+	}
+	jsonObj := map[string]string{
+		"email":      email,
+		"password":   password,
+		"two_factor": code,
+		"corp_id":    corpID,
+		"resource":   randomLoginResource(),
+	}
+	return doLoginRequest(twoFactorURL, jsonObj)
 }
 
 func doLoginRequest(url string, obj interface{}) (*SessionInfo, error) {
