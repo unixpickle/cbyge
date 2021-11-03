@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -42,7 +43,9 @@ func main() {
 		s.WebPassword = s.Password
 	}
 
-	http.Handle("/", s.Auth(http.FileServer(http.Dir(assets)).ServeHTTP))
+	http.Handle("/", s.Auth(s.Redirect2FA(http.FileServer(http.Dir(assets)).ServeHTTP).ServeHTTP))
+	http.Handle("/2fa/stage1", s.Auth(s.Handle2FAStage1))
+	http.Handle("/2fa/stage2", s.Auth(s.Handle2FAStage2))
 	http.Handle("/api/devices", s.Auth(s.HandleDevices))
 	http.Handle("/api/device/status", s.Auth(s.HandleDeviceStatus))
 	http.Handle("/api/device/set_on", s.Auth(s.HandleDeviceSetOn))
@@ -64,9 +67,9 @@ type Server struct {
 	devicesLock sync.Mutex
 	devices     []*cbyge.ControllerDevice
 
-	controllerLock   sync.Mutex
-	controllerExpire time.Time
-	controller       *cbyge.Controller
+	controllerLock sync.Mutex
+	sessionInfo    *cbyge.SessionInfo
+	controller     *cbyge.Controller
 }
 
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
@@ -92,6 +95,43 @@ func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
 		}
 		handler(w, r)
 	})
+}
+
+func (s *Server) Redirect2FA(handler http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "" {
+			handler(w, r)
+			return
+		}
+		s.controllerLock.Lock()
+		need2FA := s.SessionInfo == "" && s.sessionInfo == nil
+		s.controllerLock.Unlock()
+		if need2FA {
+			http.Redirect(w, r, "/2fa.html", http.StatusTemporaryRedirect)
+			return
+		}
+		handler(w, r)
+	})
+}
+
+func (s *Server) Handle2FAStage1(w http.ResponseWriter, r *http.Request) {
+	if err := cbyge.Login2FAStage1(s.Email, ""); err != nil {
+		s.serveError(w, http.StatusInternalServerError, err.Error())
+	} else {
+		s.serveObject(w, 200, "ok")
+	}
+}
+
+func (s *Server) Handle2FAStage2(w http.ResponseWriter, r *http.Request) {
+	code := r.FormValue("code")
+	if session, err := cbyge.Login2FAStage2(s.Email, s.Password, "", code); err != nil {
+		http.Redirect(w, r, "/2fa.html?error="+url.QueryEscape(err.Error()), http.StatusTemporaryRedirect)
+	} else {
+		s.controllerLock.Lock()
+		s.sessionInfo = session
+		s.controllerLock.Unlock()
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	}
 }
 
 func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
@@ -356,17 +396,7 @@ func (s *Server) refreshDevices() ([]*cbyge.ControllerDevice, error) {
 	}
 	devs, err := ctrl.Devices()
 	if err != nil {
-		if !cbyge.IsAccessTokenError(err) {
-			return nil, err
-		}
-		err = s.refreshSession()
-		if err != nil {
-			return nil, err
-		}
-		devs, err = ctrl.Devices()
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	s.devicesLock.Lock()
 	s.devices = devs
@@ -378,44 +408,25 @@ func (s *Server) getController() (*cbyge.Controller, error) {
 	s.controllerLock.Lock()
 	defer s.controllerLock.Unlock()
 
-	if s.SessionInfo != "" {
-		if s.controller != nil {
-			return s.controller, nil
-		}
-		var info *cbyge.SessionInfo
-		err := json.Unmarshal([]byte(s.SessionInfo), &info)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "The session info JSON, passed via -sessinfo, is invalid. "+
-				"Encountered parse error: "+err.Error()+". The offending data is: %#v\n", s.SessionInfo)
-			return nil, errors.New("invalid -sessinfo argument")
-		}
-		s.controller = cbyge.NewController(info, 0)
-		return s.controller, nil
-	}
-
-	if s.controller != nil && time.Now().Before(s.controllerExpire) {
-		return s.controller, nil
-	}
-	var err error
 	if s.controller != nil {
-		err = s.controller.Login(s.Email, s.Password)
-	} else {
-		s.controller, err = cbyge.NewControllerLogin(s.Email, s.Password)
+		return s.controller, nil
 	}
-	if err == nil {
-		s.controllerExpire = time.Now().Add(SessionExpiration)
-	}
-	return s.controller, err
-}
 
-func (s *Server) refreshSession() error {
-	s.controllerLock.Lock()
-	defer s.controllerLock.Unlock()
-	err := s.controller.Login(s.Email, s.Password)
-	if err == nil {
-		s.controllerExpire = time.Now().Add(SessionExpiration)
+	if s.sessionInfo == nil {
+		if s.SessionInfo == "" {
+			return nil, errors.New("user must authenticate with 2FA first")
+		} else {
+			err := json.Unmarshal([]byte(s.SessionInfo), &s.sessionInfo)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "The session info JSON, passed via -sessinfo, is invalid. "+
+					"Encountered parse error: "+err.Error()+". The offending data is: %#v\n", s.SessionInfo)
+				return nil, errors.New("invalid -sessinfo argument")
+			}
+		}
 	}
-	return err
+
+	s.controller = cbyge.NewController(s.sessionInfo, 0)
+	return s.controller, nil
 }
 
 func encodeStatus(s cbyge.ControllerDeviceStatus) map[string]interface{} {

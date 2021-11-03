@@ -115,11 +115,11 @@ button:focus {
 }
 
 .brightness-button::before {
-    background-image: url('svg/brightness.svg');
+    background-image: url('/svg/brightness.svg');
 }
 
 .color-button::before {
-    background-image: url('svg/color.svg');
+    background-image: url('/svg/color.svg');
 }
 
 .color-button-swatch {
@@ -286,7 +286,7 @@ button:focus {
     left: calc(50% - 20px);
     top: calc(50% - 20px);
 
-    background-image: url('svg/loader.svg');
+    background-image: url('/svg/loader.svg');
     background-size: 40px 40px;
 
     animation-name: rotate;
