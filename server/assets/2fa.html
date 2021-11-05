@@ -14,12 +14,16 @@
         <link rel="stylesheet" type="text/css" href="css/2fa.css">
     </head>
     <body>
-        <button id="get-code">Get 2FA email</button>
-        <br>
-        <form action="/2fa/stage2" method="POST">
-            <input name="code" id="code" placeholder="Code here">
-            <input type="submit">
-        </form>
+        <div id="content">
+            <div id="code-getter">
+                <label id="code-status">Press the button to get a code.</label>
+                <button id="get-code" class="button">Get 2FA email</button>
+            </div>
+            <form action="/2fa/stage2" method="POST">
+                <input name="code" id="code" type="number" placeholder="Code here">
+                <input type="submit" class="button" id="submit-button">
+            </form>
+        </div>
         <script src="js/2fa.js"></script>
     </body>
 </html>
