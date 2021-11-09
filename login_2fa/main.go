@@ -26,7 +26,7 @@ func main() {
 		essentials.Die("Must provide -email and -password flags. See -help.")
 	}
 
-	cb, err := cbyge.Login2FA(email, password, "")
+	err := cbyge.Login2FAStage1(email, "")
 	essentials.Must(err)
 
 	fmt.Print("Enter verification code: ")
@@ -34,7 +34,7 @@ func main() {
 	r := bufio.NewReader(os.Stdin)
 	code, err := r.ReadString('\n')
 	essentials.Must(err)
-	info, err := cb(strings.TrimSpace(code))
+	info, err := cbyge.Login2FAStage2(email, password, "", strings.TrimSpace(code))
 	essentials.Must(err)
 
 	data, _ := json.Marshal(info)
