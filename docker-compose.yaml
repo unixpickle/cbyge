@@ -1,0 +1,9 @@
+services:
+  cbyge-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cbyge-service
+    command: ["./cbyge-server", "-email", "${USERNAME}", "-password", "${PASSWORD}", "-no-auth"]
+    ports:
+      - 32179:8080

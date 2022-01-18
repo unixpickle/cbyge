@@ -147,7 +147,6 @@ func (s *Server) Handle2FAStage2(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
-	println("Received request to get devices")
 
 	var devs []*cbyge.ControllerDevice
 	var err error

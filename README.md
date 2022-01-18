@@ -1,3 +1,6 @@
+All credit to unixpickle for this reverse engineered implementation.
+My additions were mainly to allow the server to receive a POST with a payload that can be sent from a HomeAssistant installation.
+
 # cbyge
 
 For this project, I reverse engineered the "C by GE" app for controlling GE WiFi-connected smart lightbulbs. To do this, I started by decompiling the Android app, and then reverse engineered the binary protocol that the app uses to talk to a server. For more details, see [Reverse Engineering C by GE](#reverse-engineering-c-by-ge).
