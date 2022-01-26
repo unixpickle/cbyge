@@ -33,6 +33,10 @@ type LightRequestParams struct {
 	Async      string
 }
 
+type HealthStatus struct {
+	Status string
+}
+
 func main() {
 	s := &Server{}
 	var addr string
@@ -65,6 +69,7 @@ func main() {
 	http.Handle("/api/device/set_color_tone", s.Auth(s.HandleDeviceSetColorTone))
 	http.Handle("/api/device/set_rgb", s.Auth(s.HandleDeviceSetRGB))
 	http.Handle("/api/device/set_brightness", s.Auth(s.HandleDeviceSetBrightness))
+	http.Handle("/api/health", s.HandleHealth())
 	http.ListenAndServe(addr, nil)
 }
 
@@ -82,6 +87,21 @@ type Server struct {
 	controllerLock sync.Mutex
 	sessionInfo    *cbyge.SessionInfo
 	controller     *cbyge.Controller
+}
+
+func (s *Server) HandleHealth() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		status := new(HealthStatus)
+		status.Status = "Healthy"
+
+		if s.sessionInfo == nil {
+			status.Status = "Server needs sign in"
+		}
+
+		s.serveObject(w, http.StatusOK, status)
+
+		return
+	})
 }
 
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
