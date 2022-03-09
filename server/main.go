@@ -40,6 +40,7 @@ type HealthStatus struct {
 type MQTTSetState struct {
 	State string `json:"state"`
 	Brightness int `json:"brightness"`
+	ColorTemp int `json:"color_temp"`
 }
 
 func main() {
@@ -129,6 +130,15 @@ func (s *Server) SetupMQTT() {
 			var cmd MQTTSetState
 			json.Unmarshal([]byte(msg.Payload()), &cmd)
 			switch  {
+			case action == "set-state" && cmd.ColorTemp > 0:
+				bottom := 153
+				top := 500
+				spread := top - bottom
+				adjustedInput := cmd.ColorTemp - bottom
+				reverse := (adjustedInput * 100) / spread
+				tone := 100 - reverse
+				s.controller.SetDeviceCT(d, tone)
+				s.MQTTPublishColorTemp(id, tone)
 			case action == "set-state" && cmd.Brightness > 0:
 				s.controller.SetDeviceLum(d, cmd.Brightness)
 				s.MQTTPublishBrightness(id, cmd.Brightness)
@@ -311,6 +321,7 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 			}
 			s.MQTTPublishStatus(id, status)
 			s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
+			s.MQTTPublishColorTemp(id, int(statuses[i].ColorTone))
 		}
 	}
 	s.serveObject(w, http.StatusOK, data)
@@ -335,6 +346,7 @@ func (s *Server) MQTTPublishDeviceConfigAll() {
 		}
 		s.MQTTPublishStatus(id, status)
 		s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
+		s.MQTTPublishColorTemp(id, int(statuses[i].ColorTone))
 	}
 }
 
@@ -342,7 +354,8 @@ func (s *Server) MQTTPublishDeviceConfig(id string, name string) {
 	topic := "homeassistant/light/gecync/" + id + "/config"
 
 	var suppColorModes [1]string
-	suppColorModes[0] = "brightness"
+	suppColorModes[0] = "color_temp"
+	// suppColorModes[1] = "rgb"
 
 	var identifiers [2]string
 	identifiers[0] = id
@@ -390,6 +403,16 @@ func (s *Server) MQTTPublishStatus(id string, status string) {
 func (s *Server) MQTTPublishBrightness(id string, brightness int) {
 	topic := "homeassistant/gecync/brightness/" + id
 	data, _ := json.Marshal(brightness)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
+func (s *Server) MQTTPublishColorTemp(id string, colorTempPercent int) {
+	topic := "homeassistant/gecync/color-temp/" + id
+	top := 500
+	bottom := 153
+	colorTemp := (colorTempPercent * (top - bottom) / 100) + bottom
+	data, _ := json.Marshal(colorTemp)
 	token := s.mqttClient.Publish(topic, 0, false, data)
 	token.Wait()
 }
