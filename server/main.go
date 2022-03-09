@@ -39,6 +39,7 @@ type HealthStatus struct {
 
 type MQTTSetState struct {
 	State string `json:"state"`
+	Brightness int `json:"brightness"`
 }
 
 func main() {
@@ -121,14 +122,17 @@ func (s *Server) SetupMQTT() {
 		fmt.Printf("MQTT Message Received: %s from topic: %s\n", msg.Payload(), msg.Topic())
 		slugs := strings.Split(msg.Topic(), "/")
 		scope := slugs[1]
-		action := slugs[2]
-		id := slugs[3]
 		if (scope == "gecync") {
-			switch action {
-			case "set-state":
-				d, _ := s.getDevice(id)
-				var cmd MQTTSetState
-				json.Unmarshal([]byte(msg.Payload()), &cmd)
+			action := slugs[2]
+			id := slugs[3]
+			d, _ := s.getDevice(id)
+			var cmd MQTTSetState
+			json.Unmarshal([]byte(msg.Payload()), &cmd)
+			switch  {
+			case action == "set-state" && cmd.Brightness > 0:
+				s.controller.SetDeviceLum(d, cmd.Brightness)
+				s.MQTTPublishBrightness(id, cmd.Brightness)
+			case action == "set-state":
 				s.controller.SetDeviceStatus(d, cmd.State == "ON")
 				s.MQTTPublishStatus(id, cmd.State)
 			}
@@ -172,7 +176,7 @@ func (s *Server) SetupMQTT() {
 	fmt.Printf("Subscribed to topic %s\n", topic2)
 
 	if (s.SessionInfo != "") {
-		fmt.Println("Configuring MQTT")
+		fmt.Println("Configuring MQTT ...")
 		s.MQTTPublishDeviceConfigAll()
 	}
 }
@@ -306,6 +310,7 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 				status = "OFF"
 			}
 			s.MQTTPublishStatus(id, status)
+			s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
 		}
 	}
 	s.serveObject(w, http.StatusOK, data)
@@ -329,6 +334,7 @@ func (s *Server) MQTTPublishDeviceConfigAll() {
 			status = "OFF"
 		}
 		s.MQTTPublishStatus(id, status)
+		s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
 	}
 }
 
@@ -377,6 +383,13 @@ func (s *Server) MQTTPublishStatus(id string, status string) {
 	state := map[string]interface{}{ "state": status }
 	topic := "homeassistant/gecync/state/" + id
 	data, _ := json.Marshal(state)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
+func (s *Server) MQTTPublishBrightness(id string, brightness int) {
+	topic := "homeassistant/gecync/brightness/" + id
+	data, _ := json.Marshal(brightness)
 	token := s.mqttClient.Publish(topic, 0, false, data)
 	token.Wait()
 }
