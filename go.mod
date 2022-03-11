@@ -1,4 +1,4 @@
-module github.com/unixpickle/cbyge
+module github.com/robaston9/cbyge
 
 go 1.14
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/unixpickle/cbyge"
+	"github.com/robaston9/cbyge"
 	"github.com/unixpickle/essentials"
 )
 

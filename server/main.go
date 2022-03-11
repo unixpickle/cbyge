@@ -15,14 +15,38 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unixpickle/cbyge"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/robaston9/cbyge"
 	"github.com/unixpickle/essentials"
 )
 
 const SessionExpiration = time.Hour / 2
 
+type LightRequestParams struct {
+	/* All properties are strings to fit in easily with the existing code for simplicity sake */
+	Id         string `json:"id"`
+	On         string
+	Brightness string
+	Color_tone string
+	R          string
+	G          string
+	B          string
+	Async      string
+}
+
+type HealthStatus struct {
+	Status string
+}
+
+type MQTTSetState struct {
+	State      string `json:"state"`
+	Brightness int    `json:"brightness"`
+	ColorTemp  int    `json:"color_temp"`
+}
+
 func main() {
 	s := &Server{}
+
 	var addr string
 	var assets string
 	flag.StringVar(&assets, "assets", "assets", "assets directory")
@@ -33,6 +57,12 @@ func main() {
 	flag.StringVar(&s.WebPassword, "web-password", "",
 		"password for basic auth, if different than the account password")
 	flag.BoolVar(&s.NoAuth, "no-auth", false, "do not require any password")
+	flag.BoolVar(&s.UseMQTT, "use-mqtt", false, "integrate with mqtt")
+	flag.StringVar(&s.MQTTAddress, "mqtt-address", "",
+		"MQTT broker address (hostname or ip address)")
+	flag.IntVar(&s.MQTTPort, "mqtt-port", 1883, "MQTT broker port")
+	flag.StringVar(&s.MQTTUsername, "mqtt-username", "", "MQTT broker username")
+	flag.StringVar(&s.MQTTPassword, "mqtt-password", "", "MQTT broker password")
 	flag.Parse()
 
 	if s.SessionInfo == "" && (s.Email == "" || s.Password == "") {
@@ -41,6 +71,14 @@ func main() {
 
 	if s.WebPassword == "" {
 		s.WebPassword = s.Password
+	}
+
+	if s.UseMQTT && s.MQTTAddress == "" {
+		essentials.Die("Must provide -mqtt-address when using mqtt")
+	}
+
+	if s.UseMQTT {
+		s.SetupMQTT()
 	}
 
 	http.Handle("/", s.Auth(s.Redirect2FA(http.FileServer(http.Dir(assets)).ServeHTTP).ServeHTTP))
@@ -53,6 +91,7 @@ func main() {
 	http.Handle("/api/device/set_color_tone", s.Auth(s.HandleDeviceSetColorTone))
 	http.Handle("/api/device/set_rgb", s.Auth(s.HandleDeviceSetRGB))
 	http.Handle("/api/device/set_brightness", s.Auth(s.HandleDeviceSetBrightness))
+	http.Handle("/api/health", s.HandleHealth())
 	http.ListenAndServe(addr, nil)
 }
 
@@ -64,12 +103,112 @@ type Server struct {
 	WebPassword string
 	NoAuth      bool
 
+	UseMQTT      bool
+	MQTTUsername string
+	MQTTPassword string
+	MQTTAddress  string
+	MQTTPort     int
+
 	devicesLock sync.Mutex
 	devices     []*cbyge.ControllerDevice
 
 	controllerLock sync.Mutex
 	sessionInfo    *cbyge.SessionInfo
 	controller     *cbyge.Controller
+
+	mqttClient mqtt.Client
+}
+
+func (s *Server) SetupMQTT() {
+	var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+		fmt.Printf("MQTT Message Received: %s from topic: %s\n", msg.Payload(), msg.Topic())
+		slugs := strings.Split(msg.Topic(), "/")
+		scope := slugs[1]
+		if scope == "gecync" {
+			action := slugs[2]
+			id := slugs[3]
+			d, _ := s.getDevice(id)
+			var cmd MQTTSetState
+			json.Unmarshal([]byte(msg.Payload()), &cmd)
+			switch {
+			case action == "set-state" && cmd.ColorTemp > 0:
+				bottom := 153
+				top := 500
+				spread := top - bottom
+				adjustedInput := cmd.ColorTemp - bottom
+				reverse := (adjustedInput * 100) / spread
+				uncurvedTone := 100 - reverse
+				// apply a simple quadradic curve to the value
+				// otherwise the light is too blue through the range
+				fv := float32(uncurvedTone) / 100
+				tone := int((fv * fv) * 100)
+				s.controller.SetDeviceCT(d, tone)
+				s.MQTTPublishColorTemp(id, uncurvedTone)
+			case action == "set-state" && cmd.Brightness > 0:
+				s.controller.SetDeviceLum(d, cmd.Brightness)
+				s.MQTTPublishBrightness(id, cmd.Brightness)
+			case action == "set-state":
+				s.controller.SetDeviceStatus(d, cmd.State == "ON")
+				s.MQTTPublishStatus(id, cmd.State)
+			}
+		}
+		if scope == "status" {
+			if string(msg.Payload()) == "online" {
+				s.MQTTPublishDeviceConfigAll()
+			}
+		}
+	}
+
+	var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
+		fmt.Println("MQTT Connected")
+	}
+
+	var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
+		fmt.Printf("MQTT Connect lost: %v", err)
+	}
+
+	opts := mqtt.NewClientOptions()
+	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", s.MQTTAddress, s.MQTTPort))
+	opts.SetClientID("cbyge")
+	opts.SetUsername(s.MQTTUsername)
+	opts.SetPassword(s.MQTTPassword)
+	opts.SetDefaultPublishHandler(messagePubHandler)
+	opts.OnConnect = connectHandler
+	opts.OnConnectionLost = connectLostHandler
+	s.mqttClient = mqtt.NewClient(opts)
+	if token := s.mqttClient.Connect(); token.Wait() && token.Error() != nil {
+		panic(token.Error())
+	}
+
+	topic1 := "homeassistant/gecync/#"
+	token1 := s.mqttClient.Subscribe(topic1, 1, nil)
+	token1.Wait()
+	fmt.Printf("Subscribed to topic %s\n", topic1)
+
+	topic2 := "homeassistant/status"
+	token2 := s.mqttClient.Subscribe(topic2, 1, nil)
+	token2.Wait()
+	fmt.Printf("Subscribed to topic %s\n", topic2)
+
+	if s.SessionInfo != "" {
+		fmt.Println("Configuring MQTT ...")
+		s.MQTTPublishDeviceConfigAll()
+	}
+}
+
+func (s *Server) HandleHealth() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		status := new(HealthStatus)
+		status.Status = "Healthy"
+
+		if s.sessionInfo == nil {
+			status.Status = "Server needs sign in"
+		}
+
+		s.serveObject(w, http.StatusOK, status)
+
+		return
+	})
 }
 
 func (s *Server) Auth(handler http.HandlerFunc) http.Handler {
@@ -128,6 +267,9 @@ func (s *Server) Handle2FAStage2(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/2fa.html?error="+url.QueryEscape(err.Error()), http.StatusTemporaryRedirect)
 	} else {
 		s.controllerLock.Lock()
+		// log the sesion info
+		data, _ := json.Marshal(session)
+		fmt.Println(string(data))
 		s.sessionInfo = session
 		s.controllerLock.Unlock()
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
@@ -168,11 +310,123 @@ func (s *Server) HandleDevices(w http.ResponseWriter, r *http.Request) {
 			"name":   d.Name(),
 			"status": encodeStatus(statuses[i]),
 		})
+
+		if s.UseMQTT {
+			id := d.DeviceID()
+			name := d.Name()
+			s.MQTTPublishDeviceConfig(id, name)
+
+			// Set the status through MQTT
+			// Set the status through MQTT
+			var status string
+			if statuses[i].IsOn {
+				status = "ON"
+			} else {
+				status = "OFF"
+			}
+			s.MQTTPublishStatus(id, status)
+			s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
+			s.MQTTPublishColorTemp(id, int(statuses[i].ColorTone))
+		}
 	}
 	s.serveObject(w, http.StatusOK, data)
 }
 
+func (s *Server) MQTTPublishDeviceConfigAll() {
+	devs, _ := s.getDevices()
+	ctrl, _ := s.getController()
+	statuses, _ := ctrl.DeviceStatuses(devs)
+	for i, d := range devs {
+		id := d.DeviceID()
+		name := d.Name()
+		s.MQTTPublishDeviceConfig(id, name)
+
+		// Set the status through MQTT
+		// Set the status through MQTT
+		var status string
+		if statuses[i].IsOn {
+			status = "ON"
+		} else {
+			status = "OFF"
+		}
+		s.MQTTPublishStatus(id, status)
+		s.MQTTPublishBrightness(id, int(statuses[i].Brightness))
+		s.MQTTPublishColorTemp(id, int(statuses[i].ColorTone))
+	}
+}
+
+func (s *Server) MQTTPublishDeviceConfig(id string, name string) {
+	topic := "homeassistant/light/gecync/" + id + "/config"
+
+	var suppColorModes [1]string
+	suppColorModes[0] = "color_temp"
+	// suppColorModes[1] = "rgb"
+
+	var identifiers [2]string
+	identifiers[0] = id
+	identifiers[1] = name
+
+	device := map[string]interface{}{
+		"identifiers":  identifiers,
+		"name":         name,
+		"model":        "GE Cync Direct Connect Light Bulb",
+		"manufacturer": "GE",
+		"sw_version":   "4.XX",
+	}
+
+	mqttPayload := map[string]interface{}{
+		"name":                     name,
+		"unique_id":                id,
+		"schema":                   "json",
+		"state_topic":              "homeassistant/gecync/state/" + id,
+		"command_topic":            "homeassistant/gecync/set-state/" + id,
+		"brightness_state_topic":   "homeassistant/gecync/brightness/" + id,
+		"brightness_command_topic": "homeassistant/gecync/set-brightness/" + id,
+		"color_temp_state_topic":   "homeassistant/gecync/color-temp/" + id,
+		"color_temp_command_topic": "homeassistant/gecync/set-color-temp/" + id,
+		"brightness":               true,
+		"brightness_scale":         100,
+		"color_mode":               true,
+		"supported_color_modes":    suppColorModes,
+		"device":                   device,
+	}
+
+	data, _ := json.Marshal(mqttPayload)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
+func (s *Server) MQTTPublishStatus(id string, status string) {
+	state := map[string]interface{}{"state": status}
+	topic := "homeassistant/gecync/state/" + id
+	data, _ := json.Marshal(state)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
+func (s *Server) MQTTPublishBrightness(id string, brightness int) {
+	topic := "homeassistant/gecync/brightness/" + id
+	data, _ := json.Marshal(brightness)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
+func (s *Server) MQTTPublishColorTemp(id string, colorTempPercent int) {
+	topic := "homeassistant/gecync/color-temp/" + id
+	top := 500
+	bottom := 153
+	colorTemp := (colorTempPercent * (top - bottom) / 100) + bottom
+	data, _ := json.Marshal(colorTemp)
+	token := s.mqttClient.Publish(topic, 0, false, data)
+	token.Wait()
+}
+
 func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
+	requestParams := s.extractRequestParams(r)
+	s.GetDeviceStatus(w, r, requestParams)
+}
+
+func (s *Server) GetDeviceStatus(w http.ResponseWriter, r *http.Request, requestParams LightRequestParams) {
 	ctrl, err := s.getController()
 	if err != nil {
 		s.serveError(w, http.StatusInternalServerError, err.Error())
@@ -180,7 +434,7 @@ func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statuses := []map[string]interface{}{}
-	for _, id := range strings.Split(r.FormValue("id"), ",") {
+	for _, id := range strings.Split(requestParams.Id, ",") {
 		dev, err := s.getDevice(id)
 		if err != nil {
 			s.serveError(w, http.StatusInternalServerError, err.Error())
@@ -198,11 +452,12 @@ func (s *Server) HandleDeviceStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDeviceSetOn(w http.ResponseWriter, r *http.Request) {
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+	requestParams := s.extractRequestParams(r)
+	s.handleSetter(w, r, requestParams, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
 		if async {
-			return c.SetDeviceStatusAsync(d, r.FormValue("on") == "1")
+			return c.SetDeviceStatusAsync(d, requestParams.On == "1")
 		}
-		return c.SetDeviceStatus(d, r.FormValue("on") == "1")
+		return c.SetDeviceStatus(d, requestParams.On == "1")
 	})
 }
 
@@ -251,7 +506,8 @@ func (s *Server) HandleDeviceBlastOn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request) {
-	tone, err := strconv.Atoi(r.FormValue("color_tone"))
+	requestParams := s.extractRequestParams(r)
+	tone, err := strconv.Atoi(requestParams.Color_tone)
 	if err != nil {
 		s.serveError(w, http.StatusBadRequest, err.Error())
 		return
@@ -259,7 +515,7 @@ func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request
 		s.serveError(w, http.StatusBadRequest, "tone out of range [0, 100]")
 		return
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+	s.handleSetter(w, r, requestParams, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
 		if async {
 			return c.SetDeviceCTAsync(d, tone)
 		}
@@ -268,19 +524,20 @@ func (s *Server) HandleDeviceSetColorTone(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) HandleDeviceSetRGB(w http.ResponseWriter, r *http.Request) {
+	requestParams := s.extractRequestParams(r)
 	var values []uint8
-	for _, k := range []string{"r", "g", "b"} {
-		value, err := strconv.Atoi(r.FormValue(k))
+	for _, k := range []string{requestParams.R, requestParams.G, requestParams.B} {
+		value, err := strconv.Atoi(k)
 		if err != nil {
-			s.serveError(w, http.StatusBadRequest, "invalid '"+k+"': "+err.Error())
+			s.serveError(w, http.StatusBadRequest, "invalid rgb value:'"+k+"': "+err.Error())
 			return
 		} else if value < 0 || value > 0xff {
-			s.serveError(w, http.StatusBadRequest, "invalid '"+k+"': out of range")
+			s.serveError(w, http.StatusBadRequest, "invalid rgb value'"+k+"': out of range")
 			return
 		}
 		values = append(values, uint8(value))
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+	s.handleSetter(w, r, requestParams, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
 		if async {
 			return c.SetDeviceRGBAsync(d, values[0], values[1], values[2])
 		}
@@ -289,7 +546,8 @@ func (s *Server) HandleDeviceSetRGB(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Request) {
-	lum, err := strconv.Atoi(r.FormValue("brightness"))
+	requestParams := s.extractRequestParams(r)
+	lum, err := strconv.Atoi(requestParams.Brightness)
 	if err != nil {
 		s.serveError(w, http.StatusBadRequest, err.Error())
 		return
@@ -297,7 +555,7 @@ func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Reques
 		s.serveError(w, http.StatusBadRequest, "brightness out of range [1, 100]")
 		return
 	}
-	s.handleSetter(w, r, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
+	s.handleSetter(w, r, requestParams, func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error {
 		if async {
 			return c.SetDeviceLumAsync(d, lum)
 		}
@@ -305,10 +563,37 @@ func (s *Server) HandleDeviceSetBrightness(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
+func (s *Server) extractRequestParams(r *http.Request) LightRequestParams {
+	var requestParams LightRequestParams
+	if r.Method == "POST" {
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+
+		err := decoder.Decode(&requestParams)
+
+		if err != nil {
+			println("error occured reading body")
+		}
+	} else {
+		// requestParams = new(LightRequestParams)
+		requestParams.Id = r.FormValue("id")
+		requestParams.On = r.FormValue("on")
+		requestParams.Brightness = r.FormValue("brightness")
+		requestParams.Color_tone = r.FormValue("color_tone")
+		requestParams.R = r.FormValue("r")
+		requestParams.G = r.FormValue("g")
+		requestParams.B = r.FormValue("b")
+		requestParams.Async = r.FormValue("async")
+	}
+
+	return requestParams
+}
+
+func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request, requestParams LightRequestParams,
 	f func(c *cbyge.Controller, d *cbyge.ControllerDevice, async bool) error) {
-	if r.FormValue("async") == "1" {
-		ids := strings.Split(r.FormValue("id"), ",")
+
+	if requestParams.Async == "1" {
+		ids := strings.Split(requestParams.Id, ",")
 		go func() {
 			ctrl, err := s.getController()
 			if err != nil {
@@ -333,7 +618,7 @@ func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	for _, id := range strings.Split(r.FormValue("id"), ",") {
+	for _, id := range strings.Split(requestParams.Id, ",") {
 		dev, err := s.getDevice(id)
 		if err != nil {
 			s.serveError(w, http.StatusInternalServerError, err.Error())
@@ -347,7 +632,7 @@ func (s *Server) handleSetter(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Return the new device statuses.
-	s.HandleDeviceStatus(w, r)
+	s.GetDeviceStatus(w, r, requestParams)
 }
 
 func (s *Server) serveError(w http.ResponseWriter, code int, err string) {
